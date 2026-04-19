@@ -21,7 +21,10 @@
       "require": "./dist/bullmq/index.cjs"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": ["dist", "bin", "README.md"],
+  "bin": {
+    "better-media": "./bin/better-media.mjs"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -35,11 +38,15 @@
     "kysely": "^0.27.4",
     "mime": "^4.0.4",
     "nanoid": "^5.0.7",
+    "prompts": "^2.4.2",
     "sharp": "^0.33.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
+    "@types/pg": "^8.11.10",
+    "@types/prompts": "^2.4.9",
+    "pg": "^8.13.1",
     "tsup": "^8.3.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"

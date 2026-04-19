@@ -14,10 +14,18 @@ Attach files (images, docs, video) to any model (`User`, `Product`, `Post`, …)
 
 - [Install](#install)
 - [Quick start](#quick-start)
+  - [Option A — scaffold with the CLI](#option-a--scaffold-with-the-cli-recommended)
+  - [Option B — write the config by hand](#option-b--write-the-config-by-hand)
 - [Core concepts](#core-concepts)
 - [Configuration](#configuration)
   - [Owners, collections, and conversions](#owners-collections-and-conversions)
   - [Database](#database)
+    - [Prisma (recommended)](#prisma-recommended)
+    - [Drizzle](#drizzle)
+    - [Kysely (Postgres, MySQL, Turso, D1)](#kysely-bring-your-own-sql-dialect)
+    - [MongoDB (Mongoose)](#mongodb-mongoose)
+    - [Custom DatabaseAdapter](#custom-databaseadapter)
+    - [Built-in SQLite](#built-in-sqlite)
   - [Storage](#storage)
   - [Image processor](#image-processor)
   - [Queue](#queue)
@@ -52,21 +60,59 @@ TypeScript-first. Publishes ESM + CJS. Requires Node 20+. Install size is ~100MB
 
 ## Quick start
 
-**1. Create a config file** — one source of truth for your app.
+### Option A — scaffold with the CLI (recommended)
+
+```bash
+pnpm add better-media
+npx better-media init
+```
+
+`init` prompts you for:
+
+- **Config file path** (default `src/media.ts`)
+- **Database / ORM** — Prisma (recommended), Drizzle, PostgreSQL (Kysely), MySQL (Kysely), MongoDB (Mongoose), or "I'll wire it myself"
+- **Database URL env variable** — `DATABASE_URL` / `MONGO_URL` (when relevant)
+- **Queue** — in-process (default) or BullMQ (asks for `REDIS_URL`)
+- **Local storage root** (default `./storage/media`)
+- **Example owner** — opt-in `User.avatars` with a `thumb` conversion
+
+It writes a tailored `media.ts`, prints the `MEDIA_SECRET` to paste into your `.env`, and lists the deps to install (`@prisma/client` + `prisma`, `drizzle-orm` + `drizzle-kit`, `pg`, `mysql2`, `mongoose`, …) plus the next steps (migrate, paste the adapter) based on your choices.
+
+Non-interactive: `npx better-media init -y` accepts defaults (Prisma + in-process + example owner).
+
+### Option B — write the config by hand
+
+**1. Install.**
+
+```bash
+pnpm add better-media
+```
+
+**2. Choose a database adapter.** Pick one — each links to its full walkthrough.
+
+| Adapter | When to pick it |
+|---|---|
+| **[Prisma](#prisma-recommended)** | You already use Prisma, or want one ORM across SQL and MongoDB |
+| **[Drizzle](#drizzle)** | Type-safe SQL for Postgres / MySQL / SQLite without an ORM runtime |
+| **[Kysely + Postgres / MySQL / Turso / D1](#kysely-bring-your-own-sql-dialect)** | Raw typed SQL, no ORM, full dialect control |
+| **[Mongoose](#mongodb-mongoose)** | MongoDB with schema validation |
+| **[Custom `DatabaseAdapter`](#custom-databaseadapter)** | Any other store (Mongoose bypass, Firestore, DynamoDB, …) |
+
+**3. Create the config file.** This example uses Prisma — adapt the `database:` line for your choice.
 
 ```ts
 // src/media.ts
 import { betterMedia, LocalStorage } from 'better-media'
 import { sharpProcessor } from 'better-media/sharp'
+import { PrismaClient } from '@prisma/client'
+import { prismaAdapter } from './prisma-media-adapter'   // copy from README → Database › Prisma
+
+const prisma = new PrismaClient()
 
 export const media = betterMedia({
   secret: process.env.MEDIA_SECRET!,           // required, min 16 chars
 
-  database: {
-    provider: 'sqlite',
-    connection: { filename: './storage/media.db' },
-    autoMigrate: true,
-  },
+  database: prismaAdapter(prisma),
 
   storage: {
     default: 'local',
@@ -94,7 +140,7 @@ export const media = betterMedia({
 })
 ```
 
-**2. Use it in any route** — it's just functions.
+**4. Use it in any route** — it's just functions.
 
 ```ts
 import express from 'express'
@@ -249,151 +295,18 @@ i.width(640)
 
 ### Database
 
-The `database` field accepts either a **built-in config** (zero-boilerplate SQLite) or any object implementing the `DatabaseAdapter` interface. Everything else — Postgres, MySQL, Turso, Prisma, Drizzle — is one of those two paths.
+The `database` field accepts any `DatabaseAdapter` — or a **built-in config** for the zero-boilerplate SQLite path. Pick the section that matches your stack; each ends with a runnable `database:` line you paste into the config.
 
-#### 1. Built-in SQLite (fastest path, dev + single-server prod)
+- [Prisma (recommended)](#prisma-recommended) — works with Postgres, MySQL, SQLite, MongoDB
+- [Drizzle](#drizzle) — type-safe SQL for Postgres / MySQL / SQLite
+- [Kysely (bring your own SQL dialect)](#kysely-bring-your-own-sql-dialect) — Postgres, MySQL, Turso, D1
+- [MongoDB (Mongoose)](#mongodb-mongoose) — MongoDB with schema validation
+- [Custom `DatabaseAdapter`](#custom-databaseadapter) — anything else
+- [Built-in SQLite](#built-in-sqlite) — zero-config path for dev and single-binary deploys
 
-```ts
-database: {
-  provider: 'sqlite',
-  connection: { filename: './storage/media.db' },  // or `:memory:` for tests
-  autoMigrate: true,                                // creates the `media` table on first run
-}
-```
+#### Prisma (recommended)
 
-No migrations, no ORM setup, just works. Ships with `better-sqlite3`.
-
-#### 2. Kysely with any dialect (Postgres, MySQL, Turso, D1, …)
-
-Build your own `Kysely` instance and pass it through `kyselyAdapter()`. Works for any SQL dialect Kysely supports.
-
-##### PostgreSQL
-
-```bash
-pnpm add pg
-pnpm add -D @types/pg
-```
-
-```ts
-import { Kysely, PostgresDialect } from 'kysely'
-import { Pool } from 'pg'
-import { betterMedia, kyselyAdapter, type KyselyDatabaseSchema } from 'better-media'
-
-const db = new Kysely<KyselyDatabaseSchema>({
-  dialect: new PostgresDialect({
-    pool: new Pool({ connectionString: process.env.DATABASE_URL, max: 10 }),
-  }),
-})
-
-export const media = betterMedia({
-  secret: process.env.MEDIA_SECRET!,
-  database: kyselyAdapter(db, { autoMigrate: true }),
-  storage: { /* … */ },
-})
-```
-
-##### MySQL / MariaDB
-
-```bash
-pnpm add mysql2
-```
-
-```ts
-import { Kysely, MysqlDialect } from 'kysely'
-import { createPool } from 'mysql2'
-import { kyselyAdapter, type KyselyDatabaseSchema } from 'better-media'
-
-const db = new Kysely<KyselyDatabaseSchema>({
-  dialect: new MysqlDialect({
-    pool: createPool({ uri: process.env.DATABASE_URL, connectionLimit: 10 }),
-  }),
-})
-
-// MySQL < 8.0 can't have default values on TEXT columns — if autoMigrate errors,
-// run the SQL from the "Database schema" section below manually.
-database: kyselyAdapter(db, { autoMigrate: true }),
-```
-
-##### SQLite (own Kysely instance)
-
-Use this when you already own a Kysely instance in your app and want to share it.
-
-```bash
-pnpm add better-sqlite3
-```
-
-```ts
-import Database from 'better-sqlite3'
-import { Kysely, SqliteDialect } from 'kysely'
-import { kyselyAdapter, type KyselyDatabaseSchema } from 'better-media'
-
-const db = new Kysely<KyselyDatabaseSchema>({
-  dialect: new SqliteDialect({ database: new Database('./app.db') }),
-})
-
-database: kyselyAdapter(db, { autoMigrate: true }),
-```
-
-##### Turso / LibSQL (serverless SQLite)
-
-```bash
-pnpm add @libsql/client @libsql/kysely-libsql
-```
-
-```ts
-import { Kysely } from 'kysely'
-import { LibsqlDialect } from '@libsql/kysely-libsql'
-import { kyselyAdapter, type KyselyDatabaseSchema } from 'better-media'
-
-const db = new Kysely<KyselyDatabaseSchema>({
-  dialect: new LibsqlDialect({
-    url: process.env.TURSO_DATABASE_URL!,
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  }),
-})
-
-database: kyselyAdapter(db, { autoMigrate: true }),
-```
-
-##### Cloudflare D1
-
-```ts
-import { Kysely } from 'kysely'
-import { D1Dialect } from 'kysely-d1'
-import { kyselyAdapter, type KyselyDatabaseSchema } from 'better-media'
-
-// In a Workers/Pages request context where `env.DB` is a D1Database binding:
-const db = new Kysely<KyselyDatabaseSchema>({
-  dialect: new D1Dialect({ database: env.DB }),
-})
-
-database: kyselyAdapter(db),   // autoMigrate not supported on D1 — use D1 migrations
-```
-
-##### Sharing Kysely with your app schema
-
-If your app already has a typed Kysely, merge the `media` table into your schema so both sides stay strongly typed:
-
-```ts
-import type { KyselyDatabaseSchema } from 'better-media'
-
-interface AppDB {
-  users: UserTable
-  posts: PostTable
-  media: KyselyDatabaseSchema['media']   // ← merge the media table
-}
-
-const db = new Kysely<AppDB>({ /* … */ })
-database: kyselyAdapter(db, { autoMigrate: true }),
-```
-
-#### 3. Custom `DatabaseAdapter` (Prisma, Drizzle, Mongoose, …)
-
-For ORMs that don't wrap Kysely, implement the `DatabaseAdapter` interface yourself. Official `@better-media/prisma` and `@better-media/drizzle` packages land in M3 — until then, here's a compact sketch.
-
-##### Prisma
-
-Add this model to your `schema.prisma`:
+**1.** Add the `Media` model to your `schema.prisma`:
 
 ```prisma
 model Media {
@@ -425,7 +338,15 @@ model Media {
 }
 ```
 
-Then wire up a minimal adapter:
+**2.** Migrate:
+
+```bash
+pnpm add @prisma/client
+pnpm add -D prisma
+pnpm prisma migrate dev --name add_media
+```
+
+**3.** Copy this adapter to `src/prisma-media-adapter.ts`:
 
 ```ts
 import type { DatabaseAdapter, MediaRecord } from 'better-media'
@@ -466,17 +387,27 @@ export function prismaAdapter(prisma: PrismaClient): DatabaseAdapter {
     transaction: (fn) => prisma.$transaction((tx) => fn(prismaAdapter(tx as PrismaClient))),
   }
 }
+```
 
-// Usage
+**4.** Wire it up:
+
+```ts
+import { PrismaClient } from '@prisma/client'
+import { prismaAdapter } from './prisma-media-adapter'
+
+const prisma = new PrismaClient()
+
 database: prismaAdapter(prisma),
 ```
 
-##### Drizzle
+Same adapter works for Prisma's Postgres, MySQL, SQLite, and MongoDB providers — just change the `datasource` block in `schema.prisma`.
 
-Define the table in your schema:
+#### Drizzle
+
+**1.** Add the table to your schema (Postgres variant shown; swap `drizzle-orm/pg-core` for `mysql-core` / `sqlite-core` as needed):
 
 ```ts
-// db/schema/media.ts
+// src/db/schema/media.ts
 import { pgTable, text, integer, jsonb, timestamp, index } from 'drizzle-orm/pg-core'
 
 export const media = pgTable(
@@ -511,7 +442,9 @@ export const media = pgTable(
 )
 ```
 
-Adapter (sketch):
+**2.** Generate + run a migration with `drizzle-kit`.
+
+**3.** Copy this adapter to `src/drizzle-media-adapter.ts`:
 
 ```ts
 import { and, eq, asc, desc } from 'drizzle-orm'
@@ -553,14 +486,287 @@ export function drizzleAdapter(db: YourDrizzleDB): DatabaseAdapter {
     },
   }
 }
+```
 
-// Usage
+**4.** Wire it up:
+
+```ts
+import { db } from './db'
+import { drizzleAdapter } from './drizzle-media-adapter'
+
 database: drizzleAdapter(db),
 ```
 
-##### MongoDB / any non-SQL store
+#### Kysely (bring your own SQL dialect)
 
-The library's schema is relational (polymorphic FKs + JSON columns), but nothing requires SQL — you can implement `DatabaseAdapter` against Mongoose, DynamoDB, Firestore, or plain Redis if that's what you've got. Just map `MediaRecord` fields to documents, index `(modelType, modelId)` and `(modelType, modelId, collectionName)`, and return the same shape. Native `@better-media/mongo` is not on the short-term roadmap — community adapters welcome.
+Build your own `Kysely` instance and wrap with `kyselyAdapter()`. Works for any dialect Kysely supports.
+
+##### PostgreSQL
+
+```bash
+pnpm add pg
+pnpm add -D @types/pg
+```
+
+```ts
+import { Kysely, PostgresDialect } from 'kysely'
+import { Pool } from 'pg'
+import { betterMedia, kyselyAdapter, type KyselyDatabaseSchema } from 'better-media'
+
+const db = new Kysely<KyselyDatabaseSchema>({
+  dialect: new PostgresDialect({
+    pool: new Pool({ connectionString: process.env.DATABASE_URL, max: 10 }),
+  }),
+})
+
+database: kyselyAdapter(db, { autoMigrate: true }),
+```
+
+##### MySQL / MariaDB
+
+```bash
+pnpm add mysql2
+```
+
+```ts
+import { Kysely, MysqlDialect } from 'kysely'
+import { createPool } from 'mysql2'
+import { kyselyAdapter, type KyselyDatabaseSchema } from 'better-media'
+
+const db = new Kysely<KyselyDatabaseSchema>({
+  dialect: new MysqlDialect({
+    pool: createPool({ uri: process.env.DATABASE_URL, connectionLimit: 10 }),
+  }),
+})
+
+// MySQL < 8.0 can't DEFAULT on TEXT columns — if autoMigrate errors,
+// run the SQL from "Database schema" manually.
+database: kyselyAdapter(db, { autoMigrate: true }),
+```
+
+##### Turso / LibSQL
+
+```bash
+pnpm add @libsql/client @libsql/kysely-libsql
+```
+
+```ts
+import { Kysely } from 'kysely'
+import { LibsqlDialect } from '@libsql/kysely-libsql'
+import { kyselyAdapter, type KyselyDatabaseSchema } from 'better-media'
+
+const db = new Kysely<KyselyDatabaseSchema>({
+  dialect: new LibsqlDialect({
+    url: process.env.TURSO_DATABASE_URL!,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  }),
+})
+
+database: kyselyAdapter(db, { autoMigrate: true }),
+```
+
+##### Cloudflare D1
+
+```ts
+import { Kysely } from 'kysely'
+import { D1Dialect } from 'kysely-d1'
+import { kyselyAdapter, type KyselyDatabaseSchema } from 'better-media'
+
+// In a Workers/Pages request context where `env.DB` is a D1Database binding:
+const db = new Kysely<KyselyDatabaseSchema>({
+  dialect: new D1Dialect({ database: env.DB }),
+})
+
+database: kyselyAdapter(db),   // autoMigrate not supported on D1 — use D1 migrations
+```
+
+##### Sharing Kysely with your app schema
+
+```ts
+import type { KyselyDatabaseSchema } from 'better-media'
+
+interface AppDB {
+  users: UserTable
+  posts: PostTable
+  media: KyselyDatabaseSchema['media']   // merge the media table
+}
+
+const db = new Kysely<AppDB>({ /* … */ })
+database: kyselyAdapter(db, { autoMigrate: true }),
+```
+
+#### MongoDB (Mongoose)
+
+MongoDB has no tables or foreign keys, but the `MediaRecord` shape maps cleanly to a document. Indexes are critical for the owner + collection lookups.
+
+**1.** Install and connect once at startup:
+
+```bash
+pnpm add mongoose
+```
+
+```ts
+// src/db.ts
+import mongoose from 'mongoose'
+await mongoose.connect(process.env.MONGO_URL!)
+```
+
+**2.** Copy this adapter to `src/mongoose-media-adapter.ts`:
+
+```ts
+import type { DatabaseAdapter, MediaRecord } from 'better-media'
+import mongoose, { Schema, model } from 'mongoose'
+
+const MediaSchema = new Schema(
+  {
+    _id: { type: String, required: true },          // use `id` as the Mongo `_id`
+    uuid: { type: String, required: true, unique: true, index: true },
+    modelType: { type: String, required: true },
+    modelId: { type: String, required: true },
+    collectionName: { type: String, default: 'default' },
+    name: String,
+    fileName: String,
+    mimeType: String,
+    disk: String,
+    conversionsDisk: String,
+    size: { type: Number, default: 0 },
+    manipulations: { type: Schema.Types.Mixed, default: {} },
+    customProperties: { type: Schema.Types.Mixed, default: {} },
+    generatedConversions: { type: Schema.Types.Mixed, default: {} },
+    responsiveImages: { type: Schema.Types.Mixed, default: {} },
+    orderColumn: { type: Number, default: 0 },
+    status: { type: String, enum: ['pending', 'ready', 'failed'], default: 'ready' },
+    optimizedAt: { type: Date, default: null },
+  },
+  { timestamps: true, versionKey: false },
+)
+
+MediaSchema.index({ modelType: 1, modelId: 1 })
+MediaSchema.index({ modelType: 1, modelId: 1, collectionName: 1 })
+MediaSchema.index({ status: 1, createdAt: 1 })
+
+const MediaModel = mongoose.models.Media ?? model('Media', MediaSchema)
+
+function docToRecord(doc: any): MediaRecord {
+  return {
+    id: doc._id,
+    uuid: doc.uuid,
+    modelType: doc.modelType,
+    modelId: String(doc.modelId),
+    collectionName: doc.collectionName,
+    name: doc.name,
+    fileName: doc.fileName,
+    mimeType: doc.mimeType,
+    disk: doc.disk,
+    conversionsDisk: doc.conversionsDisk,
+    size: doc.size,
+    manipulations: doc.manipulations ?? {},
+    customProperties: doc.customProperties ?? {},
+    generatedConversions: doc.generatedConversions ?? {},
+    responsiveImages: doc.responsiveImages ?? {},
+    orderColumn: doc.orderColumn,
+    status: doc.status,
+    optimizedAt: doc.optimizedAt ?? null,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+  }
+}
+
+function toFilter(where: any): any {
+  if (!where) return {}
+  const { id, ...rest } = where
+  return id !== undefined ? { _id: id, ...rest } : rest
+}
+
+function toDoc(data: any): any {
+  const { id, ...rest } = data
+  const patch: any = { ...rest }
+  if (rest.modelId !== undefined) patch.modelId = String(rest.modelId)
+  return id !== undefined ? { _id: id, ...patch } : patch
+}
+
+export function mongooseAdapter(): DatabaseAdapter {
+  return {
+    id: 'mongoose',
+    async create(_m, data) {
+      const doc = await MediaModel.create(toDoc(data))
+      return docToRecord(doc.toObject())
+    },
+    async findOne(_m, where) {
+      const doc = await MediaModel.findOne(toFilter(where)).lean()
+      return doc ? docToRecord(doc) : null
+    },
+    async findMany(_m, q) {
+      let query: any = MediaModel.find(toFilter(q.where))
+      if (q.orderBy) {
+        const sort: Record<string, 1 | -1> = {}
+        for (const o of q.orderBy) {
+          const key = o.field === 'id' ? '_id' : (o.field as string)
+          sort[key] = o.dir === 'asc' ? 1 : -1
+        }
+        query = query.sort(sort)
+      }
+      if (q.limit) query = query.limit(q.limit)
+      if (q.offset) query = query.skip(q.offset)
+      const docs = await query.lean()
+      return docs.map(docToRecord)
+    },
+    async update(_m, where, data) {
+      const filter = toFilter(where)
+      await MediaModel.updateOne(filter, toDoc(data))
+      const doc = await MediaModel.findOne(filter).lean()
+      if (!doc) throw new Error('media not found after update')
+      return docToRecord(doc)
+    },
+    async delete(_m, where) {
+      await MediaModel.deleteOne(toFilter(where))
+    },
+  }
+}
+```
+
+**3.** Wire it up:
+
+```ts
+import './db'   // opens the mongoose connection
+import { mongooseAdapter } from './mongoose-media-adapter'
+
+database: mongooseAdapter(),
+```
+
+The adapter uses Mongoose timestamps for `createdAt` / `updatedAt` automatically. Store sizes, JSON fields, and the `status` enum are validated by the Mongoose schema.
+
+#### Custom `DatabaseAdapter`
+
+Any store works — DynamoDB, Firestore, Cassandra, plain Redis, a typed RPC service. Implement the five methods and the library is happy:
+
+```ts
+interface DatabaseAdapter {
+  readonly id: string
+  create(model: 'media', data): Promise<MediaRecord>
+  findOne(model: 'media', where): Promise<MediaRecord | null>
+  findMany(model: 'media', query): Promise<MediaRecord[]>
+  update(model: 'media', where, data): Promise<MediaRecord>
+  delete(model: 'media', where): Promise<void>
+  transaction?<R>(fn: (tx: DatabaseAdapter) => Promise<R>): Promise<R>
+}
+```
+
+Index `(modelType, modelId)` and `(modelType, modelId, collectionName)` — those are the hot paths for `getFirst` / `list`.
+
+#### Built-in SQLite
+
+Zero-config path for dev, tests, and single-binary deploys. Ships with `better-sqlite3`:
+
+```ts
+database: {
+  provider: 'sqlite',
+  connection: { filename: './storage/media.db' },  // or `:memory:` for tests
+  autoMigrate: true,                                // creates the `media` table on first run
+}
+```
+
+No schema to write, no migrations to run. Good for prototypes and internal tools.
 
 #### Choosing `autoMigrate`
 
@@ -1063,7 +1269,7 @@ interface MediaRecord {
 
 | Milestone | Scope |
 |---|---|
-| **M1 (shipped)** | headless core, `owners`/`collection`/`convert` builders with `{ queued, priority }` options, `addMedia` one-liner, conversion fallback, LocalStorage, Kysely/SQLite, Sharp, BullMQ (URL/object/IORedis input, `producerOnly`, worker tuning), Express + multer example, 20/20 tests |
+| **M1 (shipped)** | headless core, `owners`/`collection`/`convert` builders with `{ queued, priority }` options, `addMedia` one-liner, conversion fallback, LocalStorage, Kysely/SQLite, Sharp, BullMQ (URL/object/IORedis input, `producerOnly`, worker tuning), `npx better-media init` CLI, Express + multer example, 20/20 tests |
 | **M2** | `@better-media/s3` driver, optional presigned-upload helper, orphan reaper, S3 SigV4 signed URLs |
 | **M3** | `@better-media/prisma`, `@better-media/drizzle`, `@better-media/cli` (generate/migrate/doctor) |
 | **M4** | `@better-media/responsive-images` plugin, `@better-media/client` browser SDK with upload progress |

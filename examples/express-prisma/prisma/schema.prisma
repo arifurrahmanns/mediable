@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../storage/dev.db"
+}
+
+// String columns are used for JSON fields so this schema works on any Prisma
+// provider (SQLite / Postgres / MySQL). The prismaAdapter serializes on write
+// and parses on read. If you use Postgres or MySQL you can switch these to
+// `Json` and drop the conversion helpers in the adapter.
+model Media {
+  id                    String    @id
+  uuid                  String    @unique
+  modelType             String    @map("model_type")
+  modelId               String    @map("model_id")
+  collectionName        String    @default("default") @map("collection_name")
+  name                  String
+  fileName              String    @map("file_name")
+  mimeType              String    @map("mime_type")
+  disk                  String
+  conversionsDisk       String    @map("conversions_disk")
+  size                  Int
+  manipulations         String    @default("{}")
+  customProperties      String    @default("{}") @map("custom_properties")
+  generatedConversions  String    @default("{}") @map("generated_conversions")
+  responsiveImages      String    @default("{}") @map("responsive_images")
+  orderColumn           Int       @default(0) @map("order_column")
+  status                String    @default("ready")
+  optimizedAt           DateTime? @map("optimized_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  @@index([modelType, modelId])
+  @@index([modelType, modelId, collectionName])
+  @@index([status, createdAt])
+  @@map("media")
+}

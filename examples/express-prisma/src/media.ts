@@ -1,14 +1,14 @@
 import { betterMedia, LocalStorage } from 'better-media'
 import { sharpProcessor } from 'better-media/sharp'
+import { PrismaClient } from '@prisma/client'
+import { prismaAdapter } from './prisma-media-adapter.js'
+
+const prisma = new PrismaClient()
 
 export const media = betterMedia({
   secret: process.env.MEDIA_SECRET ?? 'dev-secret-at-least-16-chars-long',
 
-  database: {
-    provider: 'sqlite',
-    connection: { filename: './storage/media.db' },
-    autoMigrate: true,
-  },
+  database: prismaAdapter(prisma),
 
   storage: {
     default: 'local',
@@ -29,8 +29,10 @@ export const media = betterMedia({
         .accepts('image/*')
         .maxSize('5MB')
         .convert('thumb', (i) => i.width(96).height(96).fit('cover').format('webp'))
-        // Expensive variant runs in the queue with a low priority
-        .convert('preview', (i) => i.width(1920).format('webp'), { queued: true, priority: 10 })
+        .convert('preview', (i) => i.width(1920).format('webp'), {
+          queued: true,
+          priority: 10,
+        })
 
       collection('documents').accepts('application/pdf').maxFiles(20)
     },
