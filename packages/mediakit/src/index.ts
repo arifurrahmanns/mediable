@@ -1,5 +1,5 @@
-export { betterMedia, type BetterMediaInstance } from './factory'
-export type { BetterMediaConfig, ResolvedConfig } from './config'
+export { mediakit, type MediaKitInstance } from './factory'
+export type { MediaKitConfig, ResolvedConfig } from './config'
 
 export { LocalStorage } from './storage/local'
 export type { LocalStorageDriver, LocalStorageOptions } from './storage/local'

@@ -1,5 +1,5 @@
 /**
- * File templates emitted by `better-media init`.
+ * File templates emitted by `mediakit init`.
  *
  * The library provides the actual adapters (built-in `sqlite`, `postgres`,
  * `mysql`, `mongodb`) — the CLI no longer emits adapter source files for
@@ -10,11 +10,11 @@
 export function sqlMigrationTemplate(dialect: 'postgres' | 'mysql'): string {
   const header =
     dialect === 'mysql'
-      ? `-- SQL migration for better-media on MySQL / MariaDB.
+      ? `-- SQL migration for mediakit on MySQL / MariaDB.
 -- MySQL 5.7 cannot DEFAULT on TEXT columns; if CREATE errors there,
 -- drop the \`DEFAULT '{}'\` clauses on the JSON TEXT columns and set
 -- defaults in application code.\n`
-      : `-- SQL migration for better-media on PostgreSQL.\n`
+      : `-- SQL migration for mediakit on PostgreSQL.\n`
 
   return `${header}-- Apply once if you prefer not to use \`autoMigrate: true\`.
 

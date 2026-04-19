@@ -2,7 +2,7 @@ import { createClient, type MediaClient } from './api'
 import {
   noopLogger,
   validateConfig,
-  type BetterMediaConfig,
+  type MediaKitConfig,
   type ResolvedConfig,
 } from './config'
 import { executeOne } from './conversions/run'
@@ -24,14 +24,14 @@ import { defaultPathGenerator } from './storage/path'
 import type { Logger } from './types'
 
 /**
- * A better-media instance. This is the headless surface: a set of functions
+ * A mediakit instance. This is the headless surface: a set of functions
  * you call from your own route handlers, controllers, workers, or scripts.
  *
  * There is no HTTP handler here — your framework owns routing, parsing, and
  * authorization. Call `mm.addMedia(...)` from inside your route and return
  * the result however your app returns things.
  */
-export interface BetterMediaInstance extends MediaClient {
+export interface MediaKitInstance extends MediaClient {
   /**
    * Apply the database schema for the configured adapter.
    *
@@ -42,7 +42,7 @@ export interface BetterMediaInstance extends MediaClient {
    *    adapter exposes one; otherwise a no-op.
    *
    * Safe to call more than once. Intended for deploy/CI scripts and
-   * `npx better-media migrate`.
+   * `npx mediakit migrate`.
    */
   migrate(): Promise<void>
 
@@ -53,7 +53,7 @@ export interface BetterMediaInstance extends MediaClient {
   }
 }
 
-export function betterMedia(userConfig: BetterMediaConfig): BetterMediaInstance {
+export function mediakit(userConfig: MediaKitConfig): MediaKitInstance {
   validateConfig(userConfig)
 
   const logger: Logger = userConfig.logger ?? noopLogger()
@@ -90,7 +90,7 @@ export function betterMedia(userConfig: BetterMediaConfig): BetterMediaInstance 
   const client = createClient(config, repo)
 
   queue.process<{ mediaId: string; conversionName: string }>(
-    'better-media:generate-conversion',
+    'mediakit:generate-conversion',
     async ({ mediaId, conversionName }) => {
       const media = await repo.findById(mediaId)
       if (!media) return

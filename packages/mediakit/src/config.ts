@@ -8,7 +8,7 @@ import type { OwnerCallback } from './owners/types'
 import type { Logger } from './types'
 import type { ResolvedOwners } from './owners/resolve'
 
-export interface BetterMediaConfig {
+export interface MediaKitConfig {
   /** HMAC signing secret. Required, min 16 chars. Used to sign local temporary URLs. */
   secret: string
   database: DatabaseAdapter | BuiltInDatabaseConfig
@@ -39,20 +39,20 @@ export interface ResolvedConfig {
   logger: Logger
 }
 
-export function validateConfig(config: BetterMediaConfig): void {
+export function validateConfig(config: MediaKitConfig): void {
   if (!config.secret || typeof config.secret !== 'string' || config.secret.length < 16) {
-    throw new Error('BetterMediaConfig.secret is required and must be at least 16 characters')
+    throw new Error('MediaKitConfig.secret is required and must be at least 16 characters')
   }
   if (!config.storage || !config.storage.default || !config.storage.disks) {
-    throw new Error('BetterMediaConfig.storage.default and .disks are required')
+    throw new Error('MediaKitConfig.storage.default and .disks are required')
   }
   if (!config.storage.disks[config.storage.default]) {
     throw new Error(
-      `BetterMediaConfig.storage.default '${config.storage.default}' not found in disks`,
+      `MediaKitConfig.storage.default '${config.storage.default}' not found in disks`,
     )
   }
   if (!config.database) {
-    throw new Error('BetterMediaConfig.database is required')
+    throw new Error('MediaKitConfig.database is required')
   }
 }
 
@@ -60,7 +60,7 @@ export function noopLogger(): Logger {
   return {
     debug: () => {},
     info: () => {},
-    warn: (msg, meta) => console.warn(`[better-media] ${msg}`, meta ?? ''),
-    error: (msg, meta) => console.error(`[better-media] ${msg}`, meta ?? ''),
+    warn: (msg, meta) => console.warn(`[mediakit] ${msg}`, meta ?? ''),
+    error: (msg, meta) => console.error(`[mediakit] ${msg}`, meta ?? ''),
   }
 }

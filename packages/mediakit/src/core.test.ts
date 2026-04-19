@@ -4,14 +4,14 @@ import { dirname, join, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import sharp from 'sharp'
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest'
-import { betterMedia, LocalStorage, type BetterMediaInstance } from './index'
+import { mediakit, LocalStorage, type MediaKitInstance } from './index'
 import { sharpProcessor } from './sharp'
 
 const SECRET = 'test-secret-at-least-16-chars-long'
 const FIXTURE_PATH = resolve('tests/fixtures/image.jpg')
 
 let tmpRoot: string
-let media: BetterMediaInstance
+let media: MediaKitInstance
 let imageJpg: Buffer
 
 beforeAll(async () => {
@@ -34,7 +34,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   tmpRoot = mkdtempSync()
-  media = betterMedia({
+  media = mediakit({
     secret: SECRET,
     database: { provider: 'sqlite', connection: { filename: ':memory:' }, autoMigrate: true },
     storage: {
@@ -61,7 +61,7 @@ afterEach(() => {
 
 function mkdtempSync(): string {
   const { mkdtempSync } = require('node:fs') as typeof import('node:fs')
-  return mkdtempSync(join(tmpdir(), 'better-media-'))
+  return mkdtempSync(join(tmpdir(), 'mediakit-'))
 }
 
 describe('addMedia (one-liner)', () => {
@@ -290,7 +290,7 @@ describe('conversion priority + queued', () => {
   test('collection.convert accepts { queued, priority } and forwards priority on enqueue', async () => {
     const captured: Array<{ name: string; priority?: number }> = []
 
-    const instance = betterMedia({
+    const instance = mediakit({
       secret: SECRET,
       database: { provider: 'sqlite', connection: { filename: ':memory:' }, autoMigrate: true },
       storage: {

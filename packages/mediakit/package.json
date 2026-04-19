@@ -1,9 +1,52 @@
 {
-  "name": "better-media",
-  "version": "0.0.1",
-  "description": "Headless, framework-agnostic media library for Node.js.",
+  "name": "mediakit",
+  "version": "0.1.0",
+  "description": "Headless, framework-agnostic media library for Node.js. Attach files to any model with named collections, image conversions, pluggable storage (local FS, S3) and databases (SQLite, Postgres, MySQL, MongoDB).",
   "type": "module",
   "license": "MIT",
+  "author": {
+    "name": "Arif Ur Rahman",
+    "url": "https://github.com/arifurrahmanns"
+  },
+  "homepage": "https://github.com/arifurrahmanns/mediakit#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arifurrahmanns/mediakit.git",
+    "directory": "packages/mediakit"
+  },
+  "bugs": {
+    "url": "https://github.com/arifurrahmanns/mediakit/issues"
+  },
+  "keywords": [
+    "media",
+    "media-library",
+    "file-uploads",
+    "uploads",
+    "attachments",
+    "image-processing",
+    "thumbnails",
+    "conversions",
+    "storage",
+    "signed-urls",
+    "sharp",
+    "bullmq",
+    "s3",
+    "postgres",
+    "mysql",
+    "sqlite",
+    "mongodb",
+    "express",
+    "nestjs",
+    "hono",
+    "fastify",
+    "nextjs",
+    "typescript",
+    "nodejs"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -26,15 +69,16 @@
       "require": "./dist/mongoose/index.cjs"
     }
   },
-  "files": ["dist", "bin", "README.md"],
+  "files": ["dist", "bin", "README.md", "LICENSE"],
   "bin": {
-    "better-media": "./bin/better-media.mjs"
+    "mediakit": "./bin/mediakit.mjs"
   },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",

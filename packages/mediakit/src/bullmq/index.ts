@@ -32,7 +32,7 @@ export interface BullmqQueueOptions {
    */
   connection: ConnectionOptions | string
 
-  /** Queue name in Redis. Default: `'better-media'`. */
+  /** Queue name in Redis. Default: `'mediakit'`. */
   queueName?: string
 
   /** Worker concurrency (how many jobs run in parallel in this process). Default: 1. */
@@ -40,7 +40,7 @@ export interface BullmqQueueOptions {
 
   /**
    * Don't start a worker in this process. Use in web servers; run a dedicated
-   * worker process that calls `betterMedia(...)` with the same config (but omit
+   * worker process that calls `mediakit(...)` with the same config (but omit
    * `producerOnly`) to actually drain the queue.
    */
   producerOnly?: boolean
@@ -61,7 +61,7 @@ export interface BullmqQueue extends Queue {
 }
 
 export function bullmqQueue(opts: BullmqQueueOptions): BullmqQueue {
-  const queueName = opts.queueName ?? 'better-media'
+  const queueName = opts.queueName ?? 'mediakit'
   const connection = resolveConnection(opts.connection)
 
   const producer = new BullQueue(queueName, {

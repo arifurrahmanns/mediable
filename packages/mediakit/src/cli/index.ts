@@ -47,10 +47,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 function help(): void {
-  console.log(`better-media — media library CLI
+  console.log(`mediakit — media library CLI
 
 Usage:
-  npx better-media <command> [options]
+  npx mediakit <command> [options]
 
 Commands:
   init                    Scaffold a media.ts config file for this project
@@ -75,7 +75,7 @@ async function init(argv: string[]): Promise<void> {
   const outIdx = argv.indexOf('--out')
   const outFlag = outIdx >= 0 ? argv[outIdx + 1] : undefined
 
-  console.log(`\n  better-media — scaffold a config\n`)
+  console.log(`\n  mediakit — scaffold a config\n`)
 
   const answers = acceptDefaults
     ? applyDefaults({ outPath: outFlag })
@@ -254,10 +254,10 @@ async function askAll(
 
 function renderConfig(a: InitAnswers): string {
   const imports = new Set<string>([
-    `import { betterMedia, LocalStorage } from 'better-media'`,
-    `import { sharpProcessor } from 'better-media/sharp'`,
+    `import { mediakit, LocalStorage } from 'mediakit'`,
+    `import { sharpProcessor } from 'mediakit/sharp'`,
   ])
-  if (a.queue === 'bullmq') imports.add(`import { bullmqQueue } from 'better-media/bullmq'`)
+  if (a.queue === 'bullmq') imports.add(`import { bullmqQueue } from 'mediakit/bullmq'`)
 
   let databaseBlock = ''
   switch (a.db) {
@@ -325,7 +325,7 @@ function renderConfig(a: InitAnswers): string {
   return [
     [...imports].sort().join('\n'),
     '',
-    'export const media = betterMedia({',
+    'export const media = mediakit({',
     `  secret: process.env.MEDIA_SECRET!,`,
     '',
     databaseBlock,
@@ -373,7 +373,7 @@ function printFollowUp(a: InitAnswers): void {
     steps.push('')
     steps.push(`Set ${a.dbUrlEnv ?? 'DATABASE_URL'} in your .env (e.g. postgres://user:pass@host:5432/db).`)
     steps.push(`Then apply the schema:`)
-    steps.push(`    npx better-media migrate`)
+    steps.push(`    npx mediakit migrate`)
     steps.push(`(or just start the app — autoMigrate creates the table on first use.)`)
   }
 
@@ -381,7 +381,7 @@ function printFollowUp(a: InitAnswers): void {
     steps.push('')
     steps.push(`Set ${a.mongoUrlEnv ?? 'MONGO_URL'} in your .env (e.g. mongodb://localhost:27017/myapp).`)
     steps.push(`Then build the indexes:`)
-    steps.push(`    npx better-media migrate`)
+    steps.push(`    npx mediakit migrate`)
   }
 
   if (a.queue === 'bullmq') {
@@ -422,8 +422,8 @@ async function migrate(argv: string[]): Promise<void> {
 
   if (!configPath) {
     console.error(
-      `\nbetter-media migrate: could not find a config file.\n` +
-        `Pass one with --config <path>, or run \`npx better-media init\` first.\n`,
+      `\nmediakit migrate: could not find a config file.\n` +
+        `Pass one with --config <path>, or run \`npx mediakit init\` first.\n`,
     )
     process.exit(1)
   }
@@ -434,16 +434,16 @@ async function migrate(argv: string[]): Promise<void> {
   const instance = pickMediaInstance(loaded)
   if (!instance) {
     console.error(
-      `\nbetter-media migrate: the config did not export a betterMedia instance.\n` +
-        `Ensure the file contains \`export const media = betterMedia({...})\` ` +
-        `(or any named export whose value is a betterMedia instance).\n`,
+      `\nmediakit migrate: the config did not export a mediakit instance.\n` +
+        `Ensure the file contains \`export const media = mediakit({...})\` ` +
+        `(or any named export whose value is a mediakit instance).\n`,
     )
     process.exit(1)
   }
 
   if (typeof (instance as any).migrate !== 'function') {
     console.error(
-      `\nbetter-media migrate: the loaded instance has no .migrate() method. ` +
+      `\nmediakit migrate: the loaded instance has no .migrate() method. ` +
         `Your library version may be out of date.\n`,
     )
     process.exit(1)
@@ -460,9 +460,9 @@ async function migrate(argv: string[]): Promise<void> {
 
 function discoverConfig(): string | null {
   const candidates = [
-    'better-media.config.ts',
-    'better-media.config.js',
-    'better-media.config.mjs',
+    'mediakit.config.ts',
+    'mediakit.config.js',
+    'mediakit.config.mjs',
     'src/media.ts',
     'src/lib/media.ts',
     'lib/media.ts',
@@ -513,16 +513,16 @@ function pathToFileUrl(p: string): string {
 function pickMediaInstance(mod: Record<string, unknown>): unknown | null {
   // Prefer `media`; then `default`; then the first export that looks like an instance.
   const byName = (mod as any).media
-  if (isBetterMediaInstance(byName)) return byName
+  if (isMediaKitInstance(byName)) return byName
   const def = (mod as any).default
-  if (isBetterMediaInstance(def)) return def
+  if (isMediaKitInstance(def)) return def
   for (const v of Object.values(mod)) {
-    if (isBetterMediaInstance(v)) return v
+    if (isMediaKitInstance(v)) return v
   }
   return null
 }
 
-function isBetterMediaInstance(v: unknown): boolean {
+function isMediaKitInstance(v: unknown): boolean {
   return (
     !!v &&
     typeof v === 'object' &&

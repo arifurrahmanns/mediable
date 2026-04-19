@@ -1,8 +1,8 @@
 {
-  "name": "better-media-monorepo",
+  "name": "mediakit-monorepo",
   "private": true,
   "version": "0.0.0",
-  "description": "better-media monorepo root",
+  "description": "mediakit monorepo root",
   "type": "module",
   "packageManager": "pnpm@9.12.0",
   "engines": {
