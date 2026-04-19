@@ -1,12 +1,16 @@
-# Better-media
+# mediakit
+
+[![npm version](https://img.shields.io/npm/v/mediakit.svg)](https://www.npmjs.com/package/mediakit)
+[![license](https://img.shields.io/npm/l/mediakit.svg)](./LICENSE)
+[![node](https://img.shields.io/node/v/mediakit.svg)](https://nodejs.org)
 
 Headless, framework-agnostic media library for Node.js.
 
-Attach files (images, docs, video) to any model (`User`, `Product`, `Post`, …) with named collections, image conversions, pluggable storage drivers (local FS, S3-compatible, …) and pluggable databases (Kysely, Prisma, Drizzle, …).
+Attach files (images, docs, video) to any model (`User`, `Product`, `Post`, …) with named collections, image conversions, pluggable storage (local FS, S3-compatible) and four built-in databases (SQLite, PostgreSQL, MySQL, MongoDB).
 
 **Headless by design.** No router, no handler, no framework adapters. You already have routes, auth middleware, and a multipart parser in your app — `mediakit` just gives you the functions: `media.addMedia(...)`, `media.get(...)`, `media.url(...)`, `media.stream(...)`, `media.delete(...)`. Call them from your own Express / Hono / Fastify / NestJS / Next.js / Bun / Deno route — no wiring.
 
-> **Status:** M1 shipped. Core + local storage + Kysely/SQLite + Sharp + BullMQ + Express example. 20/20 tests pass, covering the real Sharp pipeline via a JPEG fixture. S3, Prisma/Drizzle adapters, responsive images, and the client SDK land in later milestones.
+> **Status:** v0.1.0 — first public release. Core + local storage + SQLite / Postgres / MySQL / MongoDB + Sharp + BullMQ + `init` and `migrate` CLI + Express example. 24/24 tests pass (20 in-memory + 4 live Postgres). S3 driver, responsive-images plugin, and browser client SDK land in later milestones.
 
 ---
 
@@ -47,6 +51,7 @@ One install. Sharp, better-sqlite3, and BullMQ are bundled as dependencies and l
 | `import { mediakit, LocalStorage } from 'mediakit'` | Core only |
 | `import { sharpProcessor } from 'mediakit/sharp'` | Sharp native bindings — only if you opt in |
 | `import { bullmqQueue } from 'mediakit/bullmq'` | BullMQ + ioredis — only if you opt in |
+| `import { mongooseAdapter } from 'mediakit/mongoose'` | Mongoose — only if you opt in or pick `provider: 'mongodb'` |
 
 TypeScript-first. Publishes ESM + CJS. Requires Node 20+. Install size is ~100MB because of Sharp and BullMQ — if that's a dealbreaker, open an issue.
 
@@ -184,7 +189,7 @@ That's the whole surface.
 
 **Storage driver.** A pluggable filesystem abstraction. `LocalStorage` ships in core; S3-compatible, GCS, and Azure drivers come in their own packages.
 
-**Database adapter.** A pluggable persistence layer for the `media` table. Built-in Kysely adapter works with SQLite today; Prisma and Drizzle ship later.
+**Database adapter.** A pluggable persistence layer for the `media` table. Four built-in providers ship today: SQLite, PostgreSQL, MySQL, MongoDB — just pick a `provider` and give a connection. Prisma / Drizzle / custom adapters are supported as a bring-your-own escape hatch.
 
 **Headless.** The library exposes only functions. Your framework owns routing, body parsing, and authorization. You call `media.addMedia(...)` inside your route and return the result however your app returns things.
 
@@ -778,7 +783,7 @@ app.post('/users/:id/avatar', upload.single('file'), async (req, res) => {
 
 ## Database schema
 
-The built-in Kysely adapter with `autoMigrate: true` creates this table on first run. For Prisma/Drizzle (shipping in M3), copy the equivalent schema manually until the CLI emits it.
+The built-in SQL providers (`sqlite` / `postgres` / `mysql`) create this table on first run when `autoMigrate: true`. Also emitted as `migrations/0001_create_media.sql` by `npx mediakit init` for teams that prefer to apply migrations through their own tooling. MongoDB users get the analogous indexes created by `npx mediakit migrate`.
 
 ```sql
 CREATE TABLE media (
@@ -854,11 +859,11 @@ interface MediaRecord {
 
 | Milestone | Scope |
 |---|---|
-| **M1 (shipped)** | headless core, `owners`/`collection`/`convert` builders with `{ queued, priority }` options, `addMedia` one-liner, conversion fallback, LocalStorage, Kysely/SQLite, Sharp, BullMQ (URL/object/IORedis input, `producerOnly`, worker tuning), `npx mediakit init` CLI, Express + multer example, 20/20 tests |
-| **M2** | `@mediakit/s3` driver, optional presigned-upload helper, orphan reaper, S3 SigV4 signed URLs |
-| **M3** | `@mediakit/prisma`, `@mediakit/drizzle`, `@mediakit/cli` (generate/migrate/doctor) |
-| **M4** | `@mediakit/responsive-images` plugin, `@mediakit/client` browser SDK with upload progress |
-| **M5** | Docs site, migration guide from multer + custom storage, security review, 1.0 |
+| **M1 (shipped, v0.1.0)** | headless core, `owners`/`collection`/`convert` builders with `{ queued, priority }` options, `addMedia` one-liner, conversion fallback, LocalStorage, **four built-in DB providers** (SQLite, Postgres, MySQL, MongoDB), Sharp, BullMQ (URL/object/IORedis input, `producerOnly`, worker tuning), `npx mediakit init` + `npx mediakit migrate` CLI, Express + multer example, 24/24 tests (20 in-memory + 4 live Postgres) |
+| **M2** | S3-compatible storage driver (AWS / R2 / MinIO), presigned direct-to-storage uploads, orphan reaper, S3 SigV4 signed URLs |
+| **M3** | Responsive-images plugin (srcset + SVG / blurhash placeholders), browser client SDK with upload progress + cancellation |
+| **M4** | Docs site, migration guide from multer + custom storage, security audit |
+| **v1.0** | API freeze + SemVer guarantee |
 
 ---
 

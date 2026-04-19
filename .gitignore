@@ -10,7 +10,3 @@ coverage/
 storage/
 .turbo/
 *.tgz
-
-# leftover stub from the better-media → mediakit rename; remove manually after
-# closing any VS Code tabs referencing the old path
-packages/better-media/

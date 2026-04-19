@@ -860,10 +860,10 @@ interface MediaRecord {
 | Milestone | Scope |
 |---|---|
 | **M1 (shipped, v0.1.0)** | headless core, `owners`/`collection`/`convert` builders with `{ queued, priority }` options, `addMedia` one-liner, conversion fallback, LocalStorage, **four built-in DB providers** (SQLite, Postgres, MySQL, MongoDB), Sharp, BullMQ (URL/object/IORedis input, `producerOnly`, worker tuning), `npx mediakit init` + `npx mediakit migrate` CLI, Express + multer example, 24/24 tests (20 in-memory + 4 live Postgres) |
-| **M2** | `@mediakit/s3` driver, optional presigned-upload helper, orphan reaper, S3 SigV4 signed URLs |
-| **M3** | `@mediakit/prisma`, `@mediakit/drizzle`, `@mediakit/cli` (generate/migrate/doctor) |
-| **M4** | `@mediakit/responsive-images` plugin, `@mediakit/client` browser SDK with upload progress |
-| **M5** | Docs site, migration guide from multer + custom storage, security review, 1.0 |
+| **M2** | S3-compatible storage driver (AWS / R2 / MinIO), presigned direct-to-storage uploads, orphan reaper, S3 SigV4 signed URLs |
+| **M3** | Responsive-images plugin (srcset + SVG / blurhash placeholders), browser client SDK with upload progress + cancellation |
+| **M4** | Docs site, migration guide from multer + custom storage, security audit |
+| **v1.0** | API freeze + SemVer guarantee |
 
 ---
 
