@@ -6,7 +6,14 @@ import {
   type ResolvedConfig,
 } from './config'
 import { executeOne } from './conversions/run'
-import { createSqliteKysely, kyselyAdapter, type BuiltInDatabaseConfig } from './db/kysely-adapter'
+import {
+  createMysqlKysely,
+  createPostgresKysely,
+  createSqliteKysely,
+  kyselyAdapter,
+  type BuiltInDatabaseConfig,
+} from './db/kysely-adapter'
+import { mongooseAdapter } from './mongoose'
 import { MediaRepository } from './db/repository'
 import type { DatabaseAdapter } from './db/types'
 import { createEventBus } from './events'
@@ -25,6 +32,20 @@ import type { Logger } from './types'
  * the result however your app returns things.
  */
 export interface BetterMediaInstance extends MediaClient {
+  /**
+   * Apply the database schema for the configured adapter.
+   *
+   *  - Kysely-based (SQLite / Postgres / MySQL): runs the idempotent
+   *    `CREATE TABLE IF NOT EXISTS` + indexes.
+   *  - Mongoose (MongoDB): connects if needed, then `createIndexes()`.
+   *  - Custom adapters: calls `.migrate()` / `.ensureIndexes()` if the
+   *    adapter exposes one; otherwise a no-op.
+   *
+   * Safe to call more than once. Intended for deploy/CI scripts and
+   * `npx better-media migrate`.
+   */
+  migrate(): Promise<void>
+
   /** Resolved internals — for plugins and advanced integration. */
   $context: {
     config: ResolvedConfig
@@ -85,7 +106,17 @@ export function betterMedia(userConfig: BetterMediaConfig): BetterMediaInstance 
     },
   )
 
+  const migrate = async (): Promise<void> => {
+    const adapter = db as DatabaseAdapter & {
+      migrate?: () => Promise<void>
+      ensureIndexes?: () => Promise<void>
+    }
+    if (typeof adapter.migrate === 'function') await adapter.migrate()
+    if (typeof adapter.ensureIndexes === 'function') await adapter.ensureIndexes()
+  }
+
   return Object.assign(client, {
+    migrate,
     $context: { config, repo },
   })
 }
@@ -95,14 +126,30 @@ function resolveDatabase(input: DatabaseAdapter | BuiltInDatabaseConfig): Databa
     return input as DatabaseAdapter
   }
   const builtIn = input as BuiltInDatabaseConfig
-  if (builtIn.provider === 'sqlite') {
-    const db = createSqliteKysely({
-      filename: builtIn.connection.filename,
-      url: builtIn.connection.url,
-    })
-    return kyselyAdapter(db, { autoMigrate: builtIn.autoMigrate ?? true })
+  switch (builtIn.provider) {
+    case 'sqlite': {
+      const db = createSqliteKysely({
+        filename: builtIn.connection.filename,
+        url: builtIn.connection.url,
+      })
+      return kyselyAdapter(db, { autoMigrate: builtIn.autoMigrate ?? true })
+    }
+    case 'postgres': {
+      const db = createPostgresKysely({ url: builtIn.connection.url })
+      return kyselyAdapter(db, { autoMigrate: builtIn.autoMigrate ?? true })
+    }
+    case 'mysql': {
+      const db = createMysqlKysely({ url: builtIn.connection.url })
+      return kyselyAdapter(db, { autoMigrate: builtIn.autoMigrate ?? true })
+    }
+    case 'mongodb': {
+      return mongooseAdapter({ url: builtIn.connection.url })
+    }
+    default:
+      throw new Error(
+        `unsupported built-in database provider: ${(builtIn as any).provider}`,
+      )
   }
-  throw new Error(`unsupported built-in database provider: ${(builtIn as any).provider}`)
 }
 
 function ensureLocalDisksHaveSecret(

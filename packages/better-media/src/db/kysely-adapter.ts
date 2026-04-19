@@ -1,7 +1,16 @@
 import { createRequire } from 'node:module'
-import { Kysely, SqliteDialect, sql } from 'kysely'
+import { Kysely, MysqlDialect, PostgresDialect, SqliteDialect, sql } from 'kysely'
 
 const requireShim = createRequire(import.meta.url)
+
+function tryRequire(id: string): any | null {
+  try {
+    return requireShim(id)
+  } catch {
+    return null
+  }
+}
+
 import type { MediaRecord } from '../types'
 import type { CreateInput, DatabaseAdapter, ListQuery } from './types'
 import type { KyselyDatabaseSchema, MediaTableRow } from './kysely-schema'
@@ -16,7 +25,28 @@ export interface BuiltInSqliteConfig {
   autoMigrate?: boolean
 }
 
-export type BuiltInDatabaseConfig = BuiltInSqliteConfig
+export interface BuiltInPostgresConfig {
+  provider: 'postgres'
+  connection: { url: string }
+  autoMigrate?: boolean
+}
+
+export interface BuiltInMysqlConfig {
+  provider: 'mysql'
+  connection: { url: string }
+  autoMigrate?: boolean
+}
+
+export interface BuiltInMongoConfig {
+  provider: 'mongodb'
+  connection: { url: string }
+}
+
+export type BuiltInDatabaseConfig =
+  | BuiltInSqliteConfig
+  | BuiltInPostgresConfig
+  | BuiltInMysqlConfig
+  | BuiltInMongoConfig
 
 export function kyselyAdapter(
   db: Kysely<KyselyDatabaseSchema>,
@@ -250,5 +280,33 @@ export function createSqliteKysely(opts: {
   const sqlite = new BetterSqlite3(filename)
   return new Kysely<KyselyDatabaseSchema>({
     dialect: new SqliteDialect({ database: sqlite }),
+  })
+}
+
+export function createPostgresKysely(opts: { url: string }): Kysely<KyselyDatabaseSchema> {
+  const pg = tryRequire('pg')
+  if (!pg) {
+    throw new Error(
+      "PostgreSQL provider requires the 'pg' package. Install with: pnpm add pg",
+    )
+  }
+  const Pool = pg.Pool ?? pg.default?.Pool
+  const pool = new Pool({ connectionString: opts.url })
+  return new Kysely<KyselyDatabaseSchema>({
+    dialect: new PostgresDialect({ pool }),
+  })
+}
+
+export function createMysqlKysely(opts: { url: string }): Kysely<KyselyDatabaseSchema> {
+  const mysql = tryRequire('mysql2')
+  if (!mysql) {
+    throw new Error(
+      "MySQL provider requires the 'mysql2' package. Install with: pnpm add mysql2",
+    )
+  }
+  const createPool = mysql.createPool ?? mysql.default?.createPool
+  const pool = createPool({ uri: opts.url })
+  return new Kysely<KyselyDatabaseSchema>({
+    dialect: new MysqlDialect({ pool }),
   })
 }

@@ -29,9 +29,14 @@ export { MediaRepository } from './db/repository'
 export {
   kyselyAdapter,
   createSqliteKysely,
+  createPostgresKysely,
+  createMysqlKysely,
   type KyselyAdapterOptions,
   type BuiltInDatabaseConfig,
   type BuiltInSqliteConfig,
+  type BuiltInPostgresConfig,
+  type BuiltInMysqlConfig,
+  type BuiltInMongoConfig,
 } from './db/kysely-adapter'
 export type { KyselyDatabaseSchema, MediaTableRow } from './db/kysely-schema'
 
