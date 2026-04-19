@@ -1,0 +1,8 @@
+packages:
+  - "packages/*"
+  - "packages/adapters/*"
+  - "packages/storage/*"
+  - "packages/frameworks/*"
+  - "packages/plugins/*"
+  - "packages/queue/*"
+  - "examples/*"

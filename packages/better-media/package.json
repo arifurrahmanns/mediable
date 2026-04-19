@@ -1,0 +1,47 @@
+{
+  "name": "better-media",
+  "version": "0.0.1",
+  "description": "Headless, framework-agnostic media library for Node.js.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./sharp": {
+      "types": "./dist/sharp/index.d.ts",
+      "import": "./dist/sharp/index.js",
+      "require": "./dist/sharp/index.cjs"
+    },
+    "./bullmq": {
+      "types": "./dist/bullmq/index.d.ts",
+      "import": "./dist/bullmq/index.js",
+      "require": "./dist/bullmq/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "bullmq": "^5.25.0",
+    "file-type": "^19.6.0",
+    "kysely": "^0.27.4",
+    "mime": "^4.0.4",
+    "nanoid": "^5.0.7",
+    "sharp": "^0.33.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
