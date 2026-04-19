@@ -75,7 +75,7 @@ npx mediable init
 - **Local storage root** (default `./storage/media`)
 - **Example owner** — opt-in `User.avatars` with a `thumb` conversion
 
-It writes a tailored `media.ts`, prints the `MEDIA_SECRET` to paste into your `.env`, and lists the deps to install (`pg`, `mysql2`, `mongoose`) plus the next step: run `npx mediable migrate` to create the schema.
+It writes a tailored `media.ts`, prints the `MEDIA_SECRET` to paste into your `.env`, and tells you the next step: run `npx mediable migrate` to create the schema.
 
 Non-interactive: `npx mediable init -y` accepts defaults (SQLite + in-process + example owner).
 
@@ -301,21 +301,21 @@ database: {
   autoMigrate: true,
 }
 
-// PostgreSQL  —  pnpm add pg
+// PostgreSQL
 database: {
   provider: 'postgres',
   connection: { url: process.env.DATABASE_URL! },
   autoMigrate: true,
 }
 
-// MySQL / MariaDB  —  pnpm add mysql2
+// MySQL / MariaDB
 database: {
   provider: 'mysql',
   connection: { url: process.env.DATABASE_URL! },
   autoMigrate: true,
 }
 
-// MongoDB  —  pnpm add mongoose
+// MongoDB
 database: {
   provider: 'mongodb',
   connection: { url: process.env.MONGO_URL! },

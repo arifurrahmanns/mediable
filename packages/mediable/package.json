@@ -1,6 +1,6 @@
 {
   "name": "mediable",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Headless, framework-agnostic media library for Node.js. Attach files to any model with named collections, image conversions, pluggable storage (local FS, S3) and databases (SQLite, Postgres, MySQL, MongoDB).",
   "type": "module",
   "license": "MIT",
@@ -89,9 +89,13 @@
     "better-sqlite3": "^11.3.0",
     "bullmq": "^5.25.0",
     "file-type": "^19.6.0",
+    "jiti": "^2.4.0",
     "kysely": "^0.27.4",
     "mime": "^4.0.4",
+    "mongoose": "^8.8.0",
+    "mysql2": "^3.11.4",
     "nanoid": "^5.0.7",
+    "pg": "^8.13.1",
     "prompts": "^2.4.2",
     "sharp": "^0.33.5",
     "zod": "^3.23.8"
@@ -100,9 +104,6 @@
     "@types/better-sqlite3": "^7.6.11",
     "@types/pg": "^8.11.10",
     "@types/prompts": "^2.4.9",
-    "jiti": "^2.4.0",
-    "mongoose": "^8.8.0",
-    "pg": "^8.13.1",
     "tsup": "^8.3.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"

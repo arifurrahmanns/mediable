@@ -156,11 +156,11 @@ async function askAll(
         name: 'db',
         message: 'Database',
         choices: [
-          { title: 'SQLite (built-in, zero config — great for dev)', value: 'sqlite' },
-          { title: 'PostgreSQL (built-in; needs `pnpm add pg`)', value: 'postgres' },
-          { title: 'MySQL / MariaDB (built-in; needs `pnpm add mysql2`)', value: 'mysql' },
-          { title: 'MongoDB (built-in; needs `pnpm add mongoose`)', value: 'mongodb' },
-          { title: "Custom adapter (Prisma / Drizzle / write your own — see README)", value: 'custom' },
+          { title: 'SQLite', value: 'sqlite' },
+          { title: 'PostgreSQL', value: 'postgres' },
+          { title: 'MySQL / MariaDB', value: 'mysql' },
+          { title: 'MongoDB', value: 'mongodb' },
+          { title: 'Custom adapter', value: 'custom' },
         ],
         initial: 0,
       },
@@ -357,17 +357,6 @@ function printFollowUp(a: InitAnswers): void {
   const steps: string[] = []
   steps.push(`Add MEDIA_SECRET to your .env:`)
   steps.push(`    MEDIA_SECRET=${a.secret}`)
-
-  const deps: string[] = []
-  if (a.db === 'postgres') deps.push('pg')
-  if (a.db === 'mysql') deps.push('mysql2')
-  if (a.db === 'mongodb') deps.push('mongoose')
-
-  if (deps.length > 0) {
-    steps.push('')
-    steps.push(`Install database driver:`)
-    steps.push(`    pnpm add ${deps.join(' ')}`)
-  }
 
   if (a.db === 'postgres' || a.db === 'mysql') {
     steps.push('')
