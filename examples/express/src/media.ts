@@ -1,7 +1,7 @@
-import { mediakit, LocalStorage } from 'mediakit'
-import { sharpProcessor } from 'mediakit/sharp'
+import { mediable, LocalStorage } from 'mediable'
+import { sharpProcessor } from 'mediable/sharp'
 
-export const media = mediakit({
+export const media = mediable({
   secret: process.env.MEDIA_SECRET ?? 'dev-secret-at-least-16-chars-long',
 
   // SQLite (zero config, great for dev). Swap for any of:

@@ -47,10 +47,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 }
 
 function help(): void {
-  console.log(`mediakit — media library CLI
+  console.log(`mediable — media library CLI
 
 Usage:
-  npx mediakit <command> [options]
+  npx mediable <command> [options]
 
 Commands:
   init                    Scaffold a media.ts config file for this project
@@ -75,7 +75,7 @@ async function init(argv: string[]): Promise<void> {
   const outIdx = argv.indexOf('--out')
   const outFlag = outIdx >= 0 ? argv[outIdx + 1] : undefined
 
-  console.log(`\n  mediakit — scaffold a config\n`)
+  console.log(`\n  mediable — scaffold a config\n`)
 
   const answers = acceptDefaults
     ? applyDefaults({ outPath: outFlag })
@@ -254,10 +254,10 @@ async function askAll(
 
 function renderConfig(a: InitAnswers): string {
   const imports = new Set<string>([
-    `import { mediakit, LocalStorage } from 'mediakit'`,
-    `import { sharpProcessor } from 'mediakit/sharp'`,
+    `import { mediable, LocalStorage } from 'mediable'`,
+    `import { sharpProcessor } from 'mediable/sharp'`,
   ])
-  if (a.queue === 'bullmq') imports.add(`import { bullmqQueue } from 'mediakit/bullmq'`)
+  if (a.queue === 'bullmq') imports.add(`import { bullmqQueue } from 'mediable/bullmq'`)
 
   let databaseBlock = ''
   switch (a.db) {
@@ -325,7 +325,7 @@ function renderConfig(a: InitAnswers): string {
   return [
     [...imports].sort().join('\n'),
     '',
-    'export const media = mediakit({',
+    'export const media = mediable({',
     `  secret: process.env.MEDIA_SECRET!,`,
     '',
     databaseBlock,
@@ -373,7 +373,7 @@ function printFollowUp(a: InitAnswers): void {
     steps.push('')
     steps.push(`Set ${a.dbUrlEnv ?? 'DATABASE_URL'} in your .env (e.g. postgres://user:pass@host:5432/db).`)
     steps.push(`Then apply the schema:`)
-    steps.push(`    npx mediakit migrate`)
+    steps.push(`    npx mediable migrate`)
     steps.push(`(or just start the app — autoMigrate creates the table on first use.)`)
   }
 
@@ -381,7 +381,7 @@ function printFollowUp(a: InitAnswers): void {
     steps.push('')
     steps.push(`Set ${a.mongoUrlEnv ?? 'MONGO_URL'} in your .env (e.g. mongodb://localhost:27017/myapp).`)
     steps.push(`Then build the indexes:`)
-    steps.push(`    npx mediakit migrate`)
+    steps.push(`    npx mediable migrate`)
   }
 
   if (a.queue === 'bullmq') {
@@ -422,8 +422,8 @@ async function migrate(argv: string[]): Promise<void> {
 
   if (!configPath) {
     console.error(
-      `\nmediakit migrate: could not find a config file.\n` +
-        `Pass one with --config <path>, or run \`npx mediakit init\` first.\n`,
+      `\nmediable migrate: could not find a config file.\n` +
+        `Pass one with --config <path>, or run \`npx mediable init\` first.\n`,
     )
     process.exit(1)
   }
@@ -434,16 +434,16 @@ async function migrate(argv: string[]): Promise<void> {
   const instance = pickMediaInstance(loaded)
   if (!instance) {
     console.error(
-      `\nmediakit migrate: the config did not export a mediakit instance.\n` +
-        `Ensure the file contains \`export const media = mediakit({...})\` ` +
-        `(or any named export whose value is a mediakit instance).\n`,
+      `\nmediable migrate: the config did not export a mediable instance.\n` +
+        `Ensure the file contains \`export const media = mediable({...})\` ` +
+        `(or any named export whose value is a mediable instance).\n`,
     )
     process.exit(1)
   }
 
   if (typeof (instance as any).migrate !== 'function') {
     console.error(
-      `\nmediakit migrate: the loaded instance has no .migrate() method. ` +
+      `\nmediable migrate: the loaded instance has no .migrate() method. ` +
         `Your library version may be out of date.\n`,
     )
     process.exit(1)
@@ -460,9 +460,9 @@ async function migrate(argv: string[]): Promise<void> {
 
 function discoverConfig(): string | null {
   const candidates = [
-    'mediakit.config.ts',
-    'mediakit.config.js',
-    'mediakit.config.mjs',
+    'mediable.config.ts',
+    'mediable.config.js',
+    'mediable.config.mjs',
     'src/media.ts',
     'src/lib/media.ts',
     'lib/media.ts',
@@ -513,16 +513,16 @@ function pathToFileUrl(p: string): string {
 function pickMediaInstance(mod: Record<string, unknown>): unknown | null {
   // Prefer `media`; then `default`; then the first export that looks like an instance.
   const byName = (mod as any).media
-  if (isMediaKitInstance(byName)) return byName
+  if (isMediableInstance(byName)) return byName
   const def = (mod as any).default
-  if (isMediaKitInstance(def)) return def
+  if (isMediableInstance(def)) return def
   for (const v of Object.values(mod)) {
-    if (isMediaKitInstance(v)) return v
+    if (isMediableInstance(v)) return v
   }
   return null
 }
 
-function isMediaKitInstance(v: unknown): boolean {
+function isMediableInstance(v: unknown): boolean {
   return (
     !!v &&
     typeof v === 'object' &&

@@ -1,5 +1,5 @@
-export { mediakit, type MediaKitInstance } from './factory'
-export type { MediaKitConfig, ResolvedConfig } from './config'
+export { mediable, type MediableInstance } from './factory'
+export type { MediableConfig, ResolvedConfig } from './config'
 
 export { LocalStorage } from './storage/local'
 export type { LocalStorageDriver, LocalStorageOptions } from './storage/local'

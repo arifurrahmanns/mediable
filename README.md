@@ -1,14 +1,14 @@
-# mediakit
+# mediable
 
-[![npm version](https://img.shields.io/npm/v/mediakit.svg)](https://www.npmjs.com/package/mediakit)
-[![license](https://img.shields.io/npm/l/mediakit.svg)](./LICENSE)
-[![node](https://img.shields.io/node/v/mediakit.svg)](https://nodejs.org)
+[![npm version](https://img.shields.io/npm/v/mediable.svg)](https://www.npmjs.com/package/mediable)
+[![license](https://img.shields.io/npm/l/mediable.svg)](./LICENSE)
+[![node](https://img.shields.io/node/v/mediable.svg)](https://nodejs.org)
 
 Headless, framework-agnostic media library for Node.js.
 
 Attach files (images, docs, video) to any model (`User`, `Product`, `Post`, …) with named collections, image conversions, pluggable storage (local FS, S3-compatible) and four built-in databases (SQLite, PostgreSQL, MySQL, MongoDB).
 
-**Headless by design.** No router, no handler, no framework adapters. You already have routes, auth middleware, and a multipart parser in your app — `mediakit` just gives you the functions: `media.addMedia(...)`, `media.get(...)`, `media.url(...)`, `media.stream(...)`, `media.delete(...)`. Call them from your own Express / Hono / Fastify / NestJS / Next.js / Bun / Deno route — no wiring.
+**Headless by design.** No router, no handler, no framework adapters. You already have routes, auth middleware, and a multipart parser in your app — `mediable` just gives you the functions: `media.addMedia(...)`, `media.get(...)`, `media.url(...)`, `media.stream(...)`, `media.delete(...)`. Call them from your own Express / Hono / Fastify / NestJS / Next.js / Bun / Deno route — no wiring.
 
 > **Status:** v0.1.0 — first public release. Core + local storage + SQLite / Postgres / MySQL / MongoDB + Sharp + BullMQ + `init` and `migrate` CLI + Express example. 24/24 tests pass (20 in-memory + 4 live Postgres). S3 driver, responsive-images plugin, and browser client SDK land in later milestones.
 
@@ -41,17 +41,17 @@ Attach files (images, docs, video) to any model (`User`, `Product`, `Post`, …)
 ## Install
 
 ```bash
-pnpm add mediakit
+pnpm add mediable
 ```
 
 One install. Sharp, better-sqlite3, and BullMQ are bundled as dependencies and loaded lazily — you only pay runtime cost for what you actually import.
 
 | Import | What loads |
 |---|---|
-| `import { mediakit, LocalStorage } from 'mediakit'` | Core only |
-| `import { sharpProcessor } from 'mediakit/sharp'` | Sharp native bindings — only if you opt in |
-| `import { bullmqQueue } from 'mediakit/bullmq'` | BullMQ + ioredis — only if you opt in |
-| `import { mongooseAdapter } from 'mediakit/mongoose'` | Mongoose — only if you opt in or pick `provider: 'mongodb'` |
+| `import { mediable, LocalStorage } from 'mediable'` | Core only |
+| `import { sharpProcessor } from 'mediable/sharp'` | Sharp native bindings — only if you opt in |
+| `import { bullmqQueue } from 'mediable/bullmq'` | BullMQ + ioredis — only if you opt in |
+| `import { mongooseAdapter } from 'mediable/mongoose'` | Mongoose — only if you opt in or pick `provider: 'mongodb'` |
 
 TypeScript-first. Publishes ESM + CJS. Requires Node 20+. Install size is ~100MB because of Sharp and BullMQ — if that's a dealbreaker, open an issue.
 
@@ -62,8 +62,8 @@ TypeScript-first. Publishes ESM + CJS. Requires Node 20+. Install size is ~100MB
 ### Option A — scaffold with the CLI (recommended)
 
 ```bash
-pnpm add mediakit
-npx mediakit init
+pnpm add mediable
+npx mediable init
 ```
 
 `init` prompts you for:
@@ -75,26 +75,26 @@ npx mediakit init
 - **Local storage root** (default `./storage/media`)
 - **Example owner** — opt-in `User.avatars` with a `thumb` conversion
 
-It writes a tailored `media.ts`, prints the `MEDIA_SECRET` to paste into your `.env`, and lists the deps to install (`pg`, `mysql2`, `mongoose`) plus the next step: run `npx mediakit migrate` to create the schema.
+It writes a tailored `media.ts`, prints the `MEDIA_SECRET` to paste into your `.env`, and lists the deps to install (`pg`, `mysql2`, `mongoose`) plus the next step: run `npx mediable migrate` to create the schema.
 
-Non-interactive: `npx mediakit init -y` accepts defaults (SQLite + in-process + example owner).
+Non-interactive: `npx mediable init -y` accepts defaults (SQLite + in-process + example owner).
 
 ### Option B — write the config by hand
 
 **1. Install.**
 
 ```bash
-pnpm add mediakit
+pnpm add mediable
 ```
 
 **2. Create the config file.** Point it at a database — SQLite works out of the box, Postgres/MySQL/MongoDB just need a `DATABASE_URL`. See [Database](#database) for all four shapes.
 
 ```ts
 // src/media.ts
-import { mediakit, LocalStorage } from 'mediakit'
-import { sharpProcessor } from 'mediakit/sharp'
+import { mediable, LocalStorage } from 'mediable'
+import { sharpProcessor } from 'mediable/sharp'
 
-export const media = mediakit({
+export const media = mediable({
   secret: process.env.MEDIA_SECRET!,           // required, min 16 chars
 
   // Pick your database. `autoMigrate: true` creates the `media` table on first use.
@@ -133,7 +133,7 @@ export const media = mediakit({
 **3. Apply the schema** — either set `autoMigrate: true` (above) or run once explicitly:
 
 ```bash
-npx mediakit migrate
+npx mediable migrate
 ```
 
 **4. Use it in any route** — it's just functions.
@@ -198,7 +198,7 @@ That's the whole surface.
 ## Configuration
 
 ```ts
-interface MediaKitConfig {
+interface MediableConfig {
   secret: string                                    // min 16 chars; used for HMAC signing
   database: DatabaseAdapter | BuiltInDatabaseConfig
   storage: {
@@ -332,7 +332,7 @@ Two equivalent ways:
 2. **Explicit migrate step** — run once before the app starts:
 
    ```bash
-   npx mediakit migrate
+   npx mediable migrate
    ```
 
    Reads your config, connects, creates the schema. Idempotent.
@@ -370,7 +370,7 @@ For new projects, prefer the built-in providers above — you'll write less code
 ### Storage
 
 ```ts
-import { LocalStorage } from 'mediakit'
+import { LocalStorage } from 'mediable'
 
 storage: {
   default: 'local',
@@ -389,7 +389,7 @@ Write your own driver by implementing `StorageDriver` (see the [type reference](
 ### Image processor
 
 ```ts
-import { sharpProcessor } from 'mediakit/sharp'
+import { sharpProcessor } from 'mediable/sharp'
 
 image: sharpProcessor({
   failOn: 'none',                         // 'none' | 'truncated' | 'error' | 'warning'
@@ -404,7 +404,7 @@ Defaults to an in-process async queue — fine for dev and single-process setups
 For production, swap in the **BullMQ** adapter (Redis-backed, durable, horizontally scalable):
 
 ```ts
-import { bullmqQueue } from 'mediakit/bullmq'
+import { bullmqQueue } from 'mediable/bullmq'
 ```
 
 **Redis connection — flexible input.** Pass a connection object, a URL string, or an existing `IORedis` instance:
@@ -444,7 +444,7 @@ queue: bullmqQueue({ connection: redis, concurrency: 4 })
 ```ts
 bullmqQueue({
   connection,                              // object | string | IORedis | Cluster (required)
-  queueName: 'media',                      // default: 'mediakit'
+  queueName: 'media',                      // default: 'mediable'
   concurrency: 4,                          // worker parallelism (default: 1)
 
   // Don't start a worker here — this is a web-server process.
@@ -474,13 +474,13 @@ bullmqQueue({
 
 ```ts
 // web.ts — handles HTTP
-export const media = mediakit({
+export const media = mediable({
   /* … */
   queue: bullmqQueue({ connection: process.env.REDIS_URL!, producerOnly: true }),
 })
 
 // worker.ts — dedicated worker process
-export const media = mediakit({
+export const media = mediable({
   /* … same config as web, but … */
   queue: bullmqQueue({ connection: process.env.REDIS_URL!, concurrency: 4 }),
 })
@@ -783,7 +783,7 @@ app.post('/users/:id/avatar', upload.single('file'), async (req, res) => {
 
 ## Database schema
 
-The built-in SQL providers (`sqlite` / `postgres` / `mysql`) create this table on first run when `autoMigrate: true`. Also emitted as `migrations/0001_create_media.sql` by `npx mediakit init` for teams that prefer to apply migrations through their own tooling. MongoDB users get the analogous indexes created by `npx mediakit migrate`.
+The built-in SQL providers (`sqlite` / `postgres` / `mysql`) create this table on first run when `autoMigrate: true`. Also emitted as `migrations/0001_create_media.sql` by `npx mediable init` for teams that prefer to apply migrations through their own tooling. MongoDB users get the analogous indexes created by `npx mediable migrate`.
 
 ```sql
 CREATE TABLE media (
@@ -859,7 +859,7 @@ interface MediaRecord {
 
 | Milestone | Scope |
 |---|---|
-| **M1 (shipped, v0.1.0)** | headless core, `owners`/`collection`/`convert` builders with `{ queued, priority }` options, `addMedia` one-liner, conversion fallback, LocalStorage, **four built-in DB providers** (SQLite, Postgres, MySQL, MongoDB), Sharp, BullMQ (URL/object/IORedis input, `producerOnly`, worker tuning), `npx mediakit init` + `npx mediakit migrate` CLI, Express + multer example, 24/24 tests (20 in-memory + 4 live Postgres) |
+| **M1 (shipped, v0.1.0)** | headless core, `owners`/`collection`/`convert` builders with `{ queued, priority }` options, `addMedia` one-liner, conversion fallback, LocalStorage, **four built-in DB providers** (SQLite, Postgres, MySQL, MongoDB), Sharp, BullMQ (URL/object/IORedis input, `producerOnly`, worker tuning), `npx mediable init` + `npx mediable migrate` CLI, Express + multer example, 24/24 tests (20 in-memory + 4 live Postgres) |
 | **M2** | S3-compatible storage driver (AWS / R2 / MinIO), presigned direct-to-storage uploads, orphan reaper, S3 SigV4 signed URLs |
 | **M3** | Responsive-images plugin (srcset + SVG / blurhash placeholders), browser client SDK with upload progress + cancellation |
 | **M4** | Docs site, migration guide from multer + custom storage, security audit |

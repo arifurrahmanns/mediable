@@ -1,6 +1,6 @@
 {
-  "name": "mediakit",
-  "version": "0.1.0",
+  "name": "mediable",
+  "version": "0.1.1",
   "description": "Headless, framework-agnostic media library for Node.js. Attach files to any model with named collections, image conversions, pluggable storage (local FS, S3) and databases (SQLite, Postgres, MySQL, MongoDB).",
   "type": "module",
   "license": "MIT",
@@ -8,14 +8,14 @@
     "name": "Arif Ur Rahman",
     "url": "https://github.com/arifurrahmanns"
   },
-  "homepage": "https://github.com/arifurrahmanns/mediakit#readme",
+  "homepage": "https://github.com/arifurrahmanns/mediable#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/arifurrahmanns/mediakit.git",
-    "directory": "packages/mediakit"
+    "url": "git+https://github.com/arifurrahmanns/mediable.git",
+    "directory": "packages/mediable"
   },
   "bugs": {
-    "url": "https://github.com/arifurrahmanns/mediakit/issues"
+    "url": "https://github.com/arifurrahmanns/mediable/issues"
   },
   "keywords": [
     "media",
@@ -69,9 +69,14 @@
       "require": "./dist/mongoose/index.cjs"
     }
   },
-  "files": ["dist", "bin", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
-    "mediakit": "./bin/mediakit.mjs"
+    "mediable": "./bin/mediable.mjs"
   },
   "scripts": {
     "build": "tsup",

@@ -63,7 +63,7 @@ export interface MediaStreamOptions extends MediaUrlOptions {
 }
 
 /**
- * The programmatic surface of a `mediakit()` instance. Everything is
+ * The programmatic surface of a `mediable()` instance. Everything is
  * library-as-functions — call these from your own route handlers, controllers,
  * queue workers, or CLI scripts. No HTTP layer.
  */
@@ -242,7 +242,7 @@ export function createClient(config: ResolvedConfig, repo: MediaRepository): Med
       ]
       for (const plan of plans) {
         if (plan.queued) {
-          await config.queue.enqueue('mediakit:generate-conversion', {
+          await config.queue.enqueue('mediable:generate-conversion', {
             mediaId: id,
             conversionName: plan.name,
           })

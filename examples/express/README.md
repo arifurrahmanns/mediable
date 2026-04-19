@@ -1,11 +1,13 @@
 # Express example
 
-Minimal Express app wired to `mediakit`. Defaults to SQLite so you can run it with no external services.
+Minimal Express app wired to `mediable`. Defaults to SQLite so you can run it with no external services.
 
 ## Setup
 
+This example lives in a pnpm workspace — install and run with pnpm.
+
 ```bash
-pnpm install
+pnpm install                      # links the workspace `mediable` package
 pnpm dev                          # starts http://localhost:3000
 ```
 
@@ -40,5 +42,5 @@ Same shape for `mysql` (`pnpm add mysql2`) and `mongodb` (`pnpm add mongoose`).
 
 ## Layout
 
-- `src/media.ts` — `mediakit({ database: { provider, connection }, ... })`
+- `src/media.ts` — `mediable({ database: { provider, connection }, ... })`
 - `src/server.ts` — routes that call `media.addMedia()`, `media.stream()`, `media.verifySignedToken()`, etc.

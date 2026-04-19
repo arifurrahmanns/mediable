@@ -6,24 +6,24 @@ import { Pool } from 'pg'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import {
-  mediakit,
+  mediable,
   kyselyAdapter,
   LocalStorage,
-  type MediaKitInstance,
+  type MediableInstance,
   type KyselyDatabaseSchema,
 } from './index'
 import { sharpProcessor } from './sharp'
 
 const POSTGRES_URL =
   process.env.TEST_POSTGRES_URL ??
-  'postgresql://postgres:postgres@localhost:5432/mediakit'
+  'postgresql://postgres:postgres@localhost:5432/mediable'
 
 const SECRET = 'postgres-test-secret-at-least-16-chars'
 const FIXTURE_PATH = resolve('tests/fixtures/image.jpg')
 
 let pool: Pool | null = null
 let kysely: Kysely<KyselyDatabaseSchema> | null = null
-let media: MediaKitInstance | null = null
+let media: MediableInstance | null = null
 let tmpRoot: string
 let imageJpg: Buffer
 let pgReachable = false
@@ -70,9 +70,9 @@ beforeAll(async () => {
     dialect: new PostgresDialect({ pool }),
   })
 
-  tmpRoot = mkdirSync(`${tmpdir()}/mediakit-pg-${Date.now()}`, { recursive: true }) as string
+  tmpRoot = mkdirSync(`${tmpdir()}/mediable-pg-${Date.now()}`, { recursive: true }) as string
 
-  media = mediakit({
+  media = mediable({
     secret: SECRET,
     database: kyselyAdapter(kysely, { autoMigrate: true }),
     storage: {

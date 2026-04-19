@@ -1,5 +1,5 @@
 {
-  "name": "@mediakit/example-express",
+  "name": "@mediable/example-express",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "mediakit": "workspace:*",
+    "mediable": "workspace:*",
     "express": "^4.21.0",
     "multer": "^1.4.5-lts.1"
   },

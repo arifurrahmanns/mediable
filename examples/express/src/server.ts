@@ -83,7 +83,7 @@ app.get('/signed/:token', async (req, res, next) => {
 app.get('/', (_req, res) => {
   res.type('html').send(`<!doctype html>
 <html><body style="font-family:sans-serif;max-width:640px;margin:2rem auto">
-  <h1>mediakit example</h1>
+  <h1>mediable example</h1>
   <form method="post" enctype="multipart/form-data" action="/users/u1/avatar">
     <p><input type="file" name="file" accept="image/*" required /></p>
     <p><button type="submit">Upload avatar for user u1</button></p>
@@ -94,5 +94,5 @@ app.get('/', (_req, res) => {
 
 const port = Number(process.env.PORT ?? 3000)
 app.listen(port, () => {
-  console.log(`mediakit example listening on http://localhost:${port}`)
+  console.log(`mediable example listening on http://localhost:${port}`)
 })

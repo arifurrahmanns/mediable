@@ -26,7 +26,7 @@ export async function runConversions(input: RunConversionsInput): Promise<void> 
 
   if (inlinePlans.length > 0 && !config.image) {
     config.logger.warn(
-      'mediakit: inline conversions declared but no `image` processor configured — skipping inline conversions',
+      'mediable: inline conversions declared but no `image` processor configured — skipping inline conversions',
     )
   }
 
@@ -39,7 +39,7 @@ export async function runConversions(input: RunConversionsInput): Promise<void> 
   for (const plan of queuedPlans) {
     const enqueueOpts = plan.priority !== undefined ? { priority: plan.priority } : undefined
     await config.queue.enqueue(
-      'mediakit:generate-conversion',
+      'mediable:generate-conversion',
       { mediaId: media.id, conversionName: plan.name },
       enqueueOpts,
     )

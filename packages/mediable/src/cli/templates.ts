@@ -1,5 +1,5 @@
 /**
- * File templates emitted by `mediakit init`.
+ * File templates emitted by `mediable init`.
  *
  * The library provides the actual adapters (built-in `sqlite`, `postgres`,
  * `mysql`, `mongodb`) — the CLI no longer emits adapter source files for
@@ -10,11 +10,11 @@
 export function sqlMigrationTemplate(dialect: 'postgres' | 'mysql'): string {
   const header =
     dialect === 'mysql'
-      ? `-- SQL migration for mediakit on MySQL / MariaDB.
+      ? `-- SQL migration for mediable on MySQL / MariaDB.
 -- MySQL 5.7 cannot DEFAULT on TEXT columns; if CREATE errors there,
 -- drop the \`DEFAULT '{}'\` clauses on the JSON TEXT columns and set
 -- defaults in application code.\n`
-      : `-- SQL migration for mediakit on PostgreSQL.\n`
+      : `-- SQL migration for mediable on PostgreSQL.\n`
 
   return `${header}-- Apply once if you prefer not to use \`autoMigrate: true\`.
 

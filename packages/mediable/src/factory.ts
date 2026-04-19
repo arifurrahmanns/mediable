@@ -2,7 +2,7 @@ import { createClient, type MediaClient } from './api'
 import {
   noopLogger,
   validateConfig,
-  type MediaKitConfig,
+  type MediableConfig,
   type ResolvedConfig,
 } from './config'
 import { executeOne } from './conversions/run'
@@ -24,14 +24,14 @@ import { defaultPathGenerator } from './storage/path'
 import type { Logger } from './types'
 
 /**
- * A mediakit instance. This is the headless surface: a set of functions
+ * A mediable instance. This is the headless surface: a set of functions
  * you call from your own route handlers, controllers, workers, or scripts.
  *
  * There is no HTTP handler here — your framework owns routing, parsing, and
  * authorization. Call `mm.addMedia(...)` from inside your route and return
  * the result however your app returns things.
  */
-export interface MediaKitInstance extends MediaClient {
+export interface MediableInstance extends MediaClient {
   /**
    * Apply the database schema for the configured adapter.
    *
@@ -42,7 +42,7 @@ export interface MediaKitInstance extends MediaClient {
    *    adapter exposes one; otherwise a no-op.
    *
    * Safe to call more than once. Intended for deploy/CI scripts and
-   * `npx mediakit migrate`.
+   * `npx mediable migrate`.
    */
   migrate(): Promise<void>
 
@@ -53,7 +53,7 @@ export interface MediaKitInstance extends MediaClient {
   }
 }
 
-export function mediakit(userConfig: MediaKitConfig): MediaKitInstance {
+export function mediable(userConfig: MediableConfig): MediableInstance {
   validateConfig(userConfig)
 
   const logger: Logger = userConfig.logger ?? noopLogger()
@@ -90,7 +90,7 @@ export function mediakit(userConfig: MediaKitConfig): MediaKitInstance {
   const client = createClient(config, repo)
 
   queue.process<{ mediaId: string; conversionName: string }>(
-    'mediakit:generate-conversion',
+    'mediable:generate-conversion',
     async ({ mediaId, conversionName }) => {
       const media = await repo.findById(mediaId)
       if (!media) return
