@@ -1,6 +1,6 @@
-# Express example
+# Fastify example
 
-Minimal Express app wired to `mediable`. Uses PostgreSQL (default database name `mediable` on `localhost:5432`).
+Minimal Fastify app wired to `mediable`. Uses PostgreSQL (default database name `mediable` on `localhost:5432`).
 
 ## Setup
 
@@ -16,11 +16,11 @@ docker run --name mediable-pg \
 Or set `DATABASE_URL` in your environment to point at your own instance.
 
 ```bash
-pnpm install                      # links the workspace `mediable` package
+pnpm install
 pnpm dev                          # starts http://localhost:3000
 ```
 
-The `media` table is auto-created on first request (`autoMigrate: true`). Prefer to apply the schema upfront? Run `pnpm migrate`.
+The `media` table is auto-created on first request (`autoMigrate: true`).
 
 Upload a test file:
 
@@ -30,6 +30,10 @@ curl -X POST http://localhost:3000/users/u1/avatar \
 
 curl http://localhost:3000/users/u1/avatar
 ```
+
+## `request.file()` — Laravel-style
+
+`@fastify/multipart` gives you `await req.file()` which returns `{ file, filename, mimetype }`. `mediable.addMedia()` accepts that object shape directly — no buffering, no conversion.
 
 ## Switching to SQLite / MySQL / MongoDB
 
@@ -43,5 +47,5 @@ database: { provider: 'mongodb',connection: { url: process.env.MONGO_URL! } }
 
 ## Layout
 
-- `src/media.ts` — `mediable({ database: { provider, connection }, ... })`
-- `src/server.ts` — routes that call `media.addMedia()`, `media.stream()`, `media.verifySignedToken()`, etc.
+- `src/media.ts` — `mediable({ ... })` config
+- `src/server.ts` — Fastify routes calling `media.addMedia()`, `media.stream()`, etc.

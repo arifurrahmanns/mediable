@@ -1,6 +1,6 @@
-# Express example
+# Hono example
 
-Minimal Express app wired to `mediable`. Uses PostgreSQL (default database name `mediable` on `localhost:5432`).
+Minimal Hono app wired to `mediable`. Uses PostgreSQL (default database name `mediable` on `localhost:5432`).
 
 ## Setup
 
@@ -16,11 +16,11 @@ docker run --name mediable-pg \
 Or set `DATABASE_URL` in your environment to point at your own instance.
 
 ```bash
-pnpm install                      # links the workspace `mediable` package
+pnpm install
 pnpm dev                          # starts http://localhost:3000
 ```
 
-The `media` table is auto-created on first request (`autoMigrate: true`). Prefer to apply the schema upfront? Run `pnpm migrate`.
+The `media` table is auto-created on first request (`autoMigrate: true`).
 
 Upload a test file:
 
@@ -30,6 +30,10 @@ curl -X POST http://localhost:3000/users/u1/avatar \
 
 curl http://localhost:3000/users/u1/avatar
 ```
+
+## Why no multer / busboy?
+
+Hono uses the Web Fetch API — `await c.req.formData()` is built in and returns native `File` objects, which `mediable.addMedia()` accepts directly. No middleware needed.
 
 ## Switching to SQLite / MySQL / MongoDB
 
@@ -43,5 +47,5 @@ database: { provider: 'mongodb',connection: { url: process.env.MONGO_URL! } }
 
 ## Layout
 
-- `src/media.ts` — `mediable({ database: { provider, connection }, ... })`
-- `src/server.ts` — routes that call `media.addMedia()`, `media.stream()`, `media.verifySignedToken()`, etc.
+- `src/media.ts` — `mediable({ ... })` config
+- `src/server.ts` — Hono routes calling `media.addMedia()`, `media.stream()`, etc.

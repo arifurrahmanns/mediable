@@ -37,7 +37,6 @@ export const media = mediable({
         .accepts('image/*')
         .maxSize('5MB')
         .convert('thumb', (i) => i.width(96).height(96).fit('cover').format('webp'))
-        // Heavy variant runs in the queue with a low priority
         .convert('preview', (i) => i.width(1920).format('webp'), {
           queued: true,
           priority: 10,
