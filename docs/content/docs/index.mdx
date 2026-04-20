@@ -1,0 +1,90 @@
+---
+title: Introduction
+description: A headless, framework-agnostic media library for Node.js — inspired by Spatie's Laravel Media Library, built for the modern Node ecosystem.
+---
+
+**mediable** is a headless media library for Node.js. You attach files to any model in your app — users, products, posts — without binding your code to a particular ORM, framework, or storage provider.
+
+The design goal is a single `media.ts` config you write once, then call plain functions from any route handler in any framework. No middleware, no router mount, no plugin dance.
+
+## Why it exists
+
+Most Node media libraries make one of these choices for you:
+
+- **Framework-bound.** multer + Express. NestJS file interceptors. Nothing ports cleanly.
+- **Storage-bound.** Pick S3 at install time; swapping to Cloudflare R2 later is a rewrite.
+- **ORM-bound.** Tied to Prisma, or tied to a bespoke table shape you can't reuse across models.
+
+mediable unbinds all three. The same `media.addMedia()` call works from Express, Hono, Fastify, NestJS, and Next.js. The same code writes to local disk in dev and Cloudflare R2 in prod. The same `media` table attaches to any model you want by `(modelType, modelId)` tuple.
+
+## What you get
+
+| Feature | What it does |
+|---|---|
+| **Polymorphic attachments** | Attach any file to any model — `{ type: 'User', id: userId }`, `{ type: 'Product', id: productId }`. One table, any owner. |
+| **Named collections** | Declare `avatars`, `gallery`, `documents` with their own mime/size rules. `singleFile()` for avatars, `maxFiles(8)` for galleries. |
+| **Image conversions** | Fluent Sharp DSL: `.convert('thumb', (i) => i.width(96).format('webp'))`. Inline by default, `{ queued: true }` for heavy work. |
+| **Pluggable storage** | LocalStorage for dev, s3Storage for S3 / R2 / MinIO / B2 in prod. Same API. |
+| **Pluggable database** | SQLite, Postgres, MySQL, MongoDB out of the box. Or plug Prisma / Drizzle / your own adapter. |
+| **Direct-to-storage uploads** | Browser PUTs straight to the bucket — your Node process never sees the bytes. Real mime sniff on confirm catches spoofed uploads. |
+| **Framework-agnostic** | No HTTP handler. Just functions you call from whatever routes you already have. |
+
+## How it works
+
+Every concept lives in **one config file** — `src/media.ts` (or `media.config.ts`, etc.):
+
+```ts
+import { mediable, LocalStorage } from 'mediable'
+import { sharpProcessor } from 'mediable/sharp'
+
+export const media = mediable({
+  secret: process.env.MEDIA_SECRET!,
+
+  database: {
+    provider: 'postgres',
+    connection: { url: process.env.DATABASE_URL! },
+    autoMigrate: true,
+  },
+
+  storage: {
+    default: 'local',
+    disks: { local: LocalStorage({ root: './storage/media' }) },
+  },
+
+  image: sharpProcessor(),
+
+  owners: {
+    User: ({ collection }) => {
+      collection('avatars')
+        .singleFile()
+        .accepts('image/*')
+        .maxSize('5MB')
+        .convert('thumb', (i) => i.width(96).height(96).fit('cover').format('webp'))
+    },
+  },
+})
+```
+
+Then, in any route:
+
+```ts
+import { media } from './media'
+
+app.post('/users/:id/avatar', upload.single('file'), async (req, res) => {
+  const record = await media.addMedia({
+    model: { type: 'User', id: req.params.id },
+    file: req.file,
+    collection: 'avatars',
+  })
+  res.json(record)
+})
+```
+
+That's the whole API surface for the common case. The library handles validation (mime, size, count), storage, DB write, and conversion.
+
+## What's next
+
+- **[Quick start](/docs/quick-start)** — Install, scaffold, and run your first upload in 2 minutes.
+- **[Owners and collections](/docs/owners-and-collections)** — How to model who-owns-what and what rules apply.
+- **[Storage](/docs/storage)** — Local disk vs S3 / R2 / MinIO / B2.
+- **[Direct-to-storage uploads](/docs/direct-upload)** — The browser-PUTs-to-bucket flow with real mime validation.

@@ -1,0 +1,199 @@
+---
+title: Conversions
+description: The Sharp-backed image processing DSL. Inline vs queued, colocated vs shared, the full operation surface.
+---
+
+A **conversion** is a transformation plan — "width 96, fit cover, format webp" — associated with a name. mediable captures the plan at config time, and runs it per-upload with the configured `ImageProcessor`.
+
+## Declaring a conversion
+
+Inside a collection:
+
+```ts
+collection('avatars')
+  .convert('thumb', (i) => i.width(96).height(96).fit('cover').format('webp'))
+```
+
+The second argument is a function that receives an `ImageBuilder`, applies operations, and returns the builder. The chain isn't executed at config time — it just records a plan.
+
+## The `ImageBuilder` DSL
+
+### Size
+
+```ts
+i.width(640)                        // resize width, preserve aspect ratio
+i.height(480)                       // resize height, preserve aspect ratio
+i.width(640).height(480)            // both dimensions
+i.width(640).height(480).fit('cover')   // with fit mode
+```
+
+Fit modes mirror Sharp:
+
+| Mode | Behavior |
+|---|---|
+| `cover` | Fill the box, crop excess |
+| `contain` | Fit within the box, letterbox |
+| `fill` | Stretch to fill, ignore aspect ratio |
+| `inside` | Resize to fit within, never upscale |
+| `outside` | Resize so one side covers |
+
+### Format
+
+```ts
+i.format('webp')
+i.format('webp', { quality: 80 })
+i.format('jpeg', { quality: 85, progressive: true })
+i.format('avif', { quality: 65 })
+i.format('png')
+```
+
+### Filters
+
+```ts
+i.blur()            // default sigma
+i.blur(3)           // custom sigma
+i.sharpen()
+i.grayscale()
+```
+
+### Geometric
+
+```ts
+i.rotate(90)
+i.flip()            // vertical
+i.flop()            // horizontal
+i.crop(x, y, w, h)  // pixel rectangle
+```
+
+### Quality
+
+```ts
+i.quality(80)       // applies to the output format's quality setting
+```
+
+## Inline vs queued
+
+Every conversion is inline by default — it runs during `media.addMedia()` / `media.confirmUpload()` and the call doesn't return until it's done. Good for small thumbnails.
+
+For heavy work, add `{ queued: true }`:
+
+```ts
+.convert('preview', (i) => i.width(1920).format('webp'), {
+  queued: true,
+  priority: 10,
+})
+```
+
+Queued conversions are enqueued fire-and-forget. `addMedia()` returns immediately; the worker picks up the job and updates `record.generatedConversions[name]` when done.
+
+Priority is a number. `0` (or omitted) means no priority (FIFO). Lower numbers run first — `1` beats `10`. Useful for prioritizing interactive needs (thumb for the uploader's UI) over background work (preview for later browsing).
+
+## Queue backends
+
+Configure via `queue:` in the mediable config:
+
+### In-process (default)
+
+```ts
+// No config needed — uses InProcessQueue automatically.
+```
+
+Runs in the same Node process. Non-durable (jobs lost on restart), non-distributed (can't scale across processes). Fine for dev + single-server production.
+
+### BullMQ (Redis)
+
+```ts
+import { bullmqQueue } from 'mediable/bullmq'
+
+queue: bullmqQueue({
+  connection: process.env.REDIS_URL!,
+  concurrency: 4,
+})
+```
+
+Durable, distributed. Run mediable on your web servers with `producerOnly: true` and on dedicated worker servers without that flag.
+
+## Colocated vs shared
+
+### Colocated — only runs for this collection
+
+```ts
+User: ({ collection }) => {
+  collection('avatars').convert('thumb', (i) => i.width(96).format('webp'))
+  collection('documents')     // no thumb; 'documents' accepts PDFs
+}
+```
+
+### Shared — applies to listed collections
+
+```ts
+User: ({ collection, convert }) => {
+  collection('avatars').accepts('image/*')
+  collection('gallery').accepts('image/*')
+
+  convert('card', (i) => i.width(640).fit('inside').format('webp'))
+    .performOn('avatars', 'gallery')
+}
+```
+
+### Wildcard — all image collections on this owner
+
+```ts
+User: ({ collection, convert }) => {
+  collection('avatars').accepts('image/*')
+  collection('gallery').accepts('image/*')
+
+  // No .performOn() — applies to every image-mime collection on User
+  convert('thumb', (i) => i.width(128).height(128).fit('cover').format('webp'))
+}
+```
+
+### Global wildcard — every image on every owner
+
+```ts
+'*': ({ convert }) => {
+  convert('thumb', (i) => i.width(128).height(128).fit('cover').format('webp'))
+}
+```
+
+## Retrieving the converted URL
+
+```ts
+const record = await media.getFirst({ type: 'User', id: userId }, 'avatars')
+
+await media.url(record!)                  // original
+await media.url(record!, 'thumb')         // thumb variant
+await media.url(record!, 'preview')       // preview variant — falls back to original until queued job finishes
+```
+
+`media.url(record, 'preview')` returns the original URL if the `preview` variant hasn't been generated yet. Override with `{ fallback: false }` to return the would-be URL regardless (404-prone).
+
+## Signed URL for a conversion
+
+```ts
+await media.temporaryUrl(record, 300, 'preview')   // 5-min signed preview URL
+```
+
+## Re-running conversions
+
+If you change the plan (update width, swap format), existing records won't regenerate automatically. Trigger a re-run:
+
+```ts
+await media.regenerateConversions(record.id)
+```
+
+This re-reads the current plan for every conversion the collection declares, queues the queued ones, and runs the inline ones.
+
+## Custom processor
+
+Swap Sharp for any processor that implements the `ImageProcessor` interface:
+
+```ts
+image: customProcessor(),
+```
+
+See the [API reference](/docs/api) for the full interface.
+
+## Non-image files
+
+PDFs, videos, docs — no conversions run, the original is stored and retrieved. For video thumbnails or PDF previews, write a plugin that taps into `afterUpload` and writes a derived variant manually.

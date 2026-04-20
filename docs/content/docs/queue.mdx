@@ -1,0 +1,156 @@
+---
+title: Queue
+description: In-process by default, BullMQ + Redis for production. Configure once, use for queued conversions.
+---
+
+mediable runs queued conversions (and future background jobs) through a pluggable `Queue` interface. Two implementations ship:
+
+- **`InProcessQueue`** (default) — runs jobs in the same Node process.
+- **`bullmqQueue`** — Redis-backed, durable, horizontally scalable.
+
+## Default: in-process
+
+Nothing to configure. The default `queue:` is an in-process async queue:
+
+```ts
+export const media = mediable({
+  // No `queue:` field — uses InProcessQueue automatically.
+})
+```
+
+**Fine for:** dev, single-server apps, ephemeral workloads.
+
+**Not fine for:** workloads that must survive restarts, horizontal scaling, or anything where you need separate worker processes.
+
+## Production: BullMQ
+
+```ts
+import { bullmqQueue } from 'mediable/bullmq'
+
+queue: bullmqQueue({
+  connection: process.env.REDIS_URL!,     // string | RedisOptions | IORedis
+  queueName: 'mediable',                  // default: 'mediable'
+  concurrency: 4,                         // default: 1
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 1000 },
+    removeOnComplete: true,
+    removeOnFail: 100,
+  },
+})
+```
+
+### Connection flexibility
+
+```ts
+// Option 1 — URL string
+connection: 'rediss://:password@my-host:6380/0'
+
+// Option 2 — config object
+connection: {
+  host: 'my-host',
+  port: 6379,
+  password: process.env.REDIS_PASSWORD,
+  tls: {},
+}
+
+// Option 3 — existing IORedis instance (advanced: sentinels, cluster)
+import Redis from 'ioredis'
+const redis = new Redis(process.env.REDIS_URL!, {
+  maxRetriesPerRequest: null,             // required for BullMQ workers
+  enableReadyCheck: false,
+})
+connection: redis
+```
+
+mediable sets `maxRetriesPerRequest: null` and `enableReadyCheck: false` automatically when you pass a URL string — BullMQ Worker requires those. If you hand in your own IORedis instance, you set them yourself.
+
+### Two-process deployment
+
+Typical pattern: **web servers produce jobs; dedicated workers consume them.**
+
+```ts
+// web.ts — just enqueues, never consumes
+queue: bullmqQueue({ connection: process.env.REDIS_URL!, producerOnly: true })
+
+// worker.ts — same config, but this process consumes
+queue: bullmqQueue({ connection: process.env.REDIS_URL!, concurrency: 4 })
+```
+
+Both processes import the same `media.ts`. The web servers never spin up a Worker; the worker process never listens on HTTP.
+
+### Priority
+
+Jobs have a priority number. `0` = no priority (FIFO); lower values run first.
+
+```ts
+// Per-conversion (config time)
+.convert('preview', (i) => i.width(1920), { queued: true, priority: 10 })
+
+// Per-enqueue (call site)
+await media.$context.config.queue.enqueue('my-job', payload, { priority: 1 })
+
+// Queue-wide default
+bullmqQueue({ connection, defaultJobOptions: { priority: 5 } })
+```
+
+## Writing a custom queue
+
+Implement the interface:
+
+```ts
+interface Queue {
+  enqueue<T>(job: string, payload: T, opts?: {
+    delay?: number
+    attempts?: number
+    priority?: number
+  }): Promise<void>
+
+  process<T>(job: string, handler: (payload: T) => Promise<void>): void
+
+  close(): Promise<void>
+}
+```
+
+Example — wrap your own job system:
+
+```ts
+import type { Queue } from 'mediable'
+
+export const myQueue: Queue = {
+  async enqueue(job, payload, opts) {
+    await myJobSystem.push({ name: job, data: payload, delay: opts?.delay })
+  },
+  process(job, handler) {
+    myJobSystem.on(job, async (data) => handler(data))
+  },
+  async close() {
+    await myJobSystem.disconnect()
+  },
+}
+```
+
+Then plug in:
+
+```ts
+export const media = mediable({
+  queue: myQueue,
+  // ...
+})
+```
+
+## What runs through the queue
+
+Today:
+- **Queued conversions** — any `.convert(name, fn, { queued: true })`. The job downloads the original from storage, runs the plan, writes the variant back, and updates `record.generatedConversions[name]`.
+
+Planned (via plugin):
+- Orphan reaper (pending records past TTL)
+- Responsive image generation
+- Webhook dispatches on media lifecycle events
+
+Plugins can register their own jobs via the plugin API.
+
+## Monitoring
+
+For BullMQ, plug in [Bull Board](https://github.com/felixmosh/bull-board) or Arena to get a dashboard of jobs, failures, and retry counts. mediable's producer is a standard BullMQ `Queue`, so every BullMQ tool works unchanged.

@@ -1,0 +1,224 @@
+---
+title: Quick start
+description: Install mediable, scaffold a config, and ship your first upload endpoint.
+---
+
+## Install
+
+```bash
+pnpm add mediable
+```
+
+One install. Sharp, better-sqlite3, BullMQ, and the AWS SDK are bundled as dependencies and loaded lazily — you only pay the runtime cost for subpaths you actually import.
+
+| Import | What loads |
+|---|---|
+| `import { mediable, LocalStorage } from 'mediable'` | Core only |
+| `import { sharpProcessor } from 'mediable/sharp'` | Sharp native bindings |
+| `import { s3Storage } from 'mediable/s3'` | AWS SDK v3 (S3 / R2 / MinIO / B2) |
+| `import { bullmqQueue } from 'mediable/bullmq'` | BullMQ + ioredis |
+| `import { mongooseAdapter } from 'mediable/mongoose'` | Mongoose — for `provider: 'mongodb'` |
+
+Requires Node 20+. Publishes ESM + CJS.
+
+## Option A — scaffold with the CLI
+
+The fastest way to get going:
+
+```bash
+npx mediable init
+```
+
+Walks you through a few questions (database, queue, storage root) and writes `src/media.ts` + a `.env.example`. Accept the defaults with `-y` to skip the prompts:
+
+```bash
+npx mediable init -y
+```
+
+After init, apply the schema:
+
+```bash
+npx mediable migrate
+```
+
+Or skip this step and rely on `autoMigrate: true` in the config — the table is created on first use.
+
+## Option B — write the config by hand
+
+Create `src/media.ts` yourself:
+
+```ts
+// src/media.ts
+import { mediable, LocalStorage } from 'mediable'
+import { sharpProcessor } from 'mediable/sharp'
+
+export const media = mediable({
+  secret: process.env.MEDIA_SECRET!,           // min 16 chars
+
+  database: {
+    provider: 'postgres',                       // 'sqlite' | 'postgres' | 'mysql' | 'mongodb'
+    connection: { url: process.env.DATABASE_URL! },
+    autoMigrate: true,
+  },
+
+  storage: {
+    default: 'local',
+    disks: {
+      local: LocalStorage({
+        root: './storage/media',
+        publicUrlBase: '/media',
+      }),
+    },
+  },
+
+  image: sharpProcessor(),
+
+  owners: {
+    User: ({ collection }) => {
+      collection('avatars')
+        .singleFile()
+        .accepts('image/*')
+        .maxSize('5MB')
+        .convert('thumb', (i) => i.width(96).height(96).fit('cover').format('webp'))
+    },
+  },
+})
+```
+
+`MEDIA_SECRET` is required and must be at least 16 characters — generate one with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+## Your first upload endpoint
+
+Pick your framework. The library is the same; only the route wrapper changes.
+
+### Express
+
+```ts
+import express from 'express'
+import multer from 'multer'
+import { media } from './media'
+
+const upload = multer({ storage: multer.memoryStorage() })
+const app = express()
+
+app.post('/users/:id/avatar', upload.single('file'), async (req, res) => {
+  const record = await media.addMedia({
+    model: { type: 'User', id: req.params.id },
+    file: req.file!,
+    collection: 'avatars',
+  })
+  res.json(record)
+})
+
+app.listen(3000)
+```
+
+### Hono
+
+```ts
+import { Hono } from 'hono'
+import { media } from './media'
+
+const app = new Hono()
+
+app.post('/users/:id/avatar', async (c) => {
+  const form = await c.req.formData()
+  const file = form.get('file') as File
+  const record = await media.addMedia({
+    model: { type: 'User', id: c.req.param('id') },
+    file,
+    collection: 'avatars',
+  })
+  return c.json(record)
+})
+
+export default app
+```
+
+### Fastify
+
+```ts
+import Fastify from 'fastify'
+import multipart from '@fastify/multipart'
+import { media } from './media'
+
+const app = Fastify()
+await app.register(multipart)
+
+app.post('/users/:id/avatar', async (req, reply) => {
+  const data = await req.file()
+  if (!data) return reply.code(400).send({ error: 'file required' })
+  const record = await media.addMedia({
+    model: { type: 'User', id: (req.params as { id: string }).id },
+    file: { stream: data.file, filename: data.filename, mimetype: data.mimetype },
+    collection: 'avatars',
+  })
+  return record
+})
+```
+
+### Next.js App Router
+
+```ts
+// app/api/users/[id]/avatar/route.ts
+import { media } from '@/lib/media'
+
+export const runtime = 'nodejs'
+
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const form = await req.formData()
+  const file = form.get('file') as File
+  const record = await media.addMedia({
+    model: { type: 'User', id },
+    file,
+    collection: 'avatars',
+  })
+  return Response.json(record)
+}
+```
+
+### NestJS
+
+```ts
+import { Controller, Post, Param, UploadedFile, UseInterceptors } from '@nestjs/common'
+import { FileInterceptor } from '@nestjs/platform-express'
+import { media } from './media'
+
+@Controller('users/:id/avatar')
+export class AvatarController {
+  @Post()
+  @UseInterceptors(FileInterceptor('file'))
+  upload(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    return media.addMedia({
+      model: { type: 'User', id },
+      file,
+      collection: 'avatars',
+    })
+  }
+}
+```
+
+## Test it
+
+```bash
+curl -X POST http://localhost:3000/users/u1/avatar \
+  -F 'file=@./your-image.jpg;type=image/jpeg'
+```
+
+You'll get back a `MediaRecord` with the upload's id, uuid, and generated conversions status. Retrieve it later with:
+
+```ts
+const record = await media.getFirst({ type: 'User', id: 'u1' }, 'avatars')
+const thumbUrl = await media.url(record!, 'thumb')
+```
+
+## Next
+
+- **[Owners and collections](/docs/owners-and-collections)** — rules, validation, conversions DSL.
+- **[Storage](/docs/storage)** — swap to S3 / R2 / MinIO / B2 for production.
+- **[Direct-to-storage uploads](/docs/direct-upload)** — skip the server entirely; PUT straight to the bucket.

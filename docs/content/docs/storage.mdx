@@ -1,0 +1,111 @@
+---
+title: Storage
+description: LocalStorage for dev, s3Storage for S3 / Cloudflare R2 / MinIO / Backblaze B2 in production. One API, configurable at the disk level.
+---
+
+Every `mediable()` instance takes a `storage` block — a default disk plus a map of named disks. Switching provider is one block change; call sites don't move.
+
+```ts
+storage: {
+  default: 'local',
+  disks: {
+    local: LocalStorage({ /* ... */ }),
+    s3:    s3Storage({ /* ... */ }),
+  },
+}
+```
+
+Disks can be referenced per-collection (`.disk('s3')`) or per-call (`media.addMedia({ disk: 's3', ... })`). `default` kicks in when nothing overrides.
+
+## Local disk
+
+For dev, single-server deployments, or anything on a mounted volume.
+
+```ts
+import { LocalStorage } from 'mediable'
+
+local: LocalStorage({
+  root: './storage/media',
+  publicUrlBase: '/media',              // optional: URL prefix if a static middleware serves `root`
+  signingSecret: 'optional',            // defaults to config.secret
+})
+```
+
+If `publicUrlBase` is set, `media.url()` returns a direct URL (useful when you have `express.static('./storage/media')` or a reverse proxy). If omitted, `media.url()` returns `null` and you stream bytes through your own route via `media.stream()`.
+
+**Does not support presigned uploads** — use `media.addMedia()` with the file attached. For direct-to-storage uploads, use S3 / R2 / MinIO / B2.
+
+## S3 / Cloudflare R2 / MinIO / Backblaze B2
+
+One driver, every S3-compatible backend.
+
+```ts
+import { s3Storage } from 'mediable/s3'
+
+s3: s3Storage({
+  bucket: 'my-app-media',
+  region: 'us-east-1',                  // 'auto' for R2
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY!,
+    secretAccessKey: process.env.S3_SECRET_KEY!,
+  },
+  // Optional for non-AWS providers:
+  // endpoint: process.env.S3_ENDPOINT,  // R2 / MinIO / B2
+  // forcePathStyle: true,               // required for MinIO
+
+  publicUrlBase: 'https://cdn.example.com',   // optional: CDN / public bucket prefix
+  keyPrefix: 'uploads/',                      // optional: namespace inside the bucket
+  acl: 'public-read',                         // optional: apply to every put()
+  defaultCacheControl: 'public, max-age=31536000, immutable',
+})
+```
+
+### Provider presets
+
+| Provider | `region` | `endpoint` | `forcePathStyle` |
+|---|---|---|---|
+| **AWS S3** | e.g. `'us-east-1'` | *(omit)* | *(omit)* |
+| **Cloudflare R2** | `'auto'` | `https://<acct>.r2.cloudflarestorage.com` | *(omit)* |
+| **MinIO** | `'us-east-1'` | `http://localhost:9000` | `true` |
+| **Backblaze B2** | e.g. `'us-west-002'` | `https://s3.us-west-002.backblazeb2.com` | *(omit)* |
+| **DigitalOcean Spaces** | e.g. `'nyc3'` | `https://nyc3.digitaloceanspaces.com` | *(omit)* |
+| **Wasabi** | e.g. `'us-east-1'` | `https://s3.wasabisys.com` | *(omit)* |
+
+### Public vs private buckets
+
+- **Set `publicUrlBase`** for public buckets / CDN in front. `media.url()` returns the direct URL clients can hit in the browser.
+- **Omit `publicUrlBase`** for private buckets. `media.url()` returns `null`; use `media.stream()` to proxy bytes through your own authenticated route, or `media.temporaryUrl()` to issue a short-lived presigned GET.
+
+## Temporary (signed) URLs
+
+Works with every driver:
+
+```ts
+const url = await media.temporaryUrl(record, 300)                     // 5 min, original
+const url = await media.temporaryUrl(record, 300, 'thumb')            // 5 min, thumb variant
+```
+
+- **Local disk** produces an HMAC token; terminate it with `media.verifySignedToken()` in your own route.
+- **S3-compatible** produces a presigned GET URL that clients hit directly.
+
+## Bring your own driver
+
+Implement the `StorageDriver` interface and plug it into `disks`. Required methods: `put`, `get`, `getBuffer`, `delete`, `deleteMany`, `exists`, `size`, `url`, `temporaryUrl`, `stream`. Optional: `copy`, `move`, `presignUpload`.
+
+```ts
+storage: {
+  default: 'custom',
+  disks: {
+    custom: {
+      name: 'custom',
+      async put(key, body, opts) { /* ... */ },
+      async get(key) { /* ... */ },
+      // ...etc
+    },
+  },
+}
+```
+
+## Configuring direct-to-storage uploads
+
+If the driver implements `presignUpload` (S3 does, Local doesn't), you unlock the [direct-to-storage upload flow](/docs/direct-upload) — browser PUTs bytes straight to the bucket with no server hop.

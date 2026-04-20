@@ -1,0 +1,215 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+@source '../node_modules/fumadocs-ui/dist/**/*.js';
+
+/* ─────────────── Design tokens ─────────────── */
+
+:root {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-mono);
+  font-feature-settings: 'zero', 'ss01';
+}
+
+/* ─────────────── Aurora hero background ─────────────── */
+
+.aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.aurora::before,
+.aurora::after {
+  content: '';
+  position: absolute;
+  width: 60%;
+  height: 100%;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+
+.aurora::before {
+  top: -20%;
+  left: -10%;
+  background: radial-gradient(circle, oklch(0.68 0.23 265 / 0.9), transparent 70%);
+  animation: aurora-a 22s ease-in-out infinite;
+}
+
+.aurora::after {
+  top: -10%;
+  right: -15%;
+  background: radial-gradient(circle, oklch(0.72 0.2 320 / 0.85), transparent 70%);
+  animation: aurora-b 26s ease-in-out infinite;
+  animation-delay: -10s;
+}
+
+.aurora-blob {
+  position: absolute;
+  top: 10%;
+  left: 30%;
+  width: 40%;
+  height: 70%;
+  border-radius: 9999px;
+  background: radial-gradient(circle, oklch(0.74 0.18 195 / 0.8), transparent 70%);
+  filter: blur(90px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  animation: aurora-c 30s ease-in-out infinite;
+  animation-delay: -5s;
+  will-change: transform;
+}
+
+.dark .aurora::before {
+  opacity: 0.45;
+}
+.dark .aurora::after {
+  opacity: 0.4;
+}
+.dark .aurora-blob {
+  opacity: 0.35;
+}
+
+@keyframes aurora-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(15%, 8%, 0) scale(1.15); }
+}
+@keyframes aurora-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(-20%, 10%, 0) scale(1.1); }
+}
+@keyframes aurora-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(10%, -15%, 0) scale(0.95); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora::before,
+  .aurora::after,
+  .aurora-blob {
+    animation: none;
+  }
+}
+
+/* ─────────────── Grid / dot patterns ─────────────── */
+
+.grid-pattern {
+  background-image:
+    linear-gradient(to right, color-mix(in oklch, currentColor 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklch, currentColor 6%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.dot-pattern {
+  background-image: radial-gradient(
+    color-mix(in oklch, currentColor 12%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 20px 20px;
+}
+
+.radial-fade {
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 50%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 50%, transparent 100%);
+}
+
+/* ─────────────── Glow utilities ─────────────── */
+
+.glow-border {
+  position: relative;
+  overflow: hidden;
+}
+
+.glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    oklch(0.68 0.23 265 / 0.4),
+    transparent 30%,
+    transparent 70%,
+    oklch(0.72 0.2 320 / 0.4)
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.glow-border:hover::before {
+  opacity: 1;
+}
+
+/* ─────────────── Shimmer (for copy buttons, etc.) ─────────────── */
+
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, currentColor 8%, transparent),
+    transparent
+  );
+  animation: shimmer 2.5s infinite;
+}
+
+/* ─────────────── Fade-up (section entrance) ─────────────── */
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up {
+  animation: fade-up 0.7s ease-out both;
+}
+
+/* ─────────────── Code block polish ─────────────── */
+
+.terminal-card {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--color-fd-card) 95%, transparent),
+    var(--color-fd-card)
+  );
+  backdrop-filter: blur(8px);
+}

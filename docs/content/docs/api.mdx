@@ -1,0 +1,182 @@
+---
+title: API reference
+description: The functions you call from your routes — addMedia, presignUpload, confirmUpload, url, stream, delete, and everything in between.
+---
+
+Every `mediable(config)` call returns a `media` client with the full API surface. Call these from your own routes, workers, and scripts.
+
+## Attaching (upload + record)
+
+### `media.addMedia(input)`
+
+One-liner attach — hand off any file shape your framework produces.
+
+```ts
+await media.addMedia({
+  model: { type: 'User', id: userId },          // who owns this
+  file: req.file,                                // see "What `file` accepts"
+  fileName: 'image.jpg',                         // required if `file` is a raw Buffer / stream
+  collection: 'avatars',                         // defaults to 'default'
+  name: 'Profile photo',
+  customProperties: { alt: 'me' },
+  order: 3,
+  disk: 's3',                                    // override the default disk
+  preservingOriginal: false,
+})
+```
+
+### `media.for(modelType, modelId).addFromX(...).save()`
+
+Fluent chain, great for ingestion scripts:
+
+```ts
+await media.for('User', userId)
+  .addFromFile('/tmp/image.jpg')                 // or addFromBuffer / addFromStream / addFromUrl / addFromBase64
+  .toCollection('avatars')
+  .withName('Profile photo')
+  .withCustomProperties({ alt: 'me' })
+  .withOrder(0)
+  .save()
+```
+
+### What `file` accepts
+
+| Shape | Example |
+|---|---|
+| `Buffer` / `Uint8Array` | `Buffer.from(bytes)` (pass `fileName`) |
+| Node `Readable` | Fastify multipart's `data.file` (pass `fileName`) |
+| `{ path: string }` | `{ path: '/tmp/upload.png' }` |
+| Multer shape | `req.file` — `{ buffer, originalname, mimetype }` |
+| Fastify-multipart shape | `{ stream, filename, mimetype }` |
+| Base64 | `{ data: 'iVBORw...', filename: 'x.png', encoding: 'base64' }` |
+| Remote URL | `{ url: 'https://...', timeoutMs: 30000, maxBytes: 5_242_880 }` |
+| Web `File` | From `FormData.get('file')` — Next.js / Hono / Fetch |
+
+## Direct-to-storage uploads
+
+### `media.presignUpload(input)`
+
+```ts
+const { uuid, uploadUrl, method, headers, expires, key } = await media.presignUpload({
+  model: { type: 'User', id: userId },
+  fileName: 'avatar.jpg',
+  mimeType: 'image/jpeg',                        // enforced by the bucket at PUT time
+  size: 1_048_576,                                // optional hint; re-checked on confirm
+  collection: 'avatars',
+  expiresInSeconds: 600,                          // default 600 (10 min)
+})
+```
+
+Reserves a DB row with `status='pending'`, signs the URL, returns everything the client needs to PUT the bytes directly. Requires a driver that implements `presignUpload` — S3/R2/MinIO/B2 do, LocalStorage doesn't.
+
+### `media.confirmUpload(input)`
+
+```ts
+const record = await media.confirmUpload({ uuid })
+```
+
+Verifies the object landed, sniffs the real mime type, re-validates size, flips to `status='ready'`, fires `onMediaAdded`, runs conversions. Idempotent — safe to call twice.
+
+See the [Direct-to-storage uploads guide](/docs/direct-upload) for the full flow.
+
+## Retrieval
+
+```ts
+await media.get(mediaId)                                    // MediaRecord | null
+await media.getByUuid(uuid)                                  // MediaRecord | null
+await media.getFirst({ type: 'User', id: 42 }, 'avatars')    // first record in collection
+await media.list({ type: 'User', id: 42 }, 'gallery')        // ordered by orderColumn
+```
+
+## URLs
+
+```ts
+await media.url(record, 'thumb')                              // public URL or null
+await media.url(record, 'thumb', { fallback: false })         // opt out of original-fallback
+await media.temporaryUrl(record, 300, 'thumb')                // signed URL, 5 min
+```
+
+- **`url()`** — returns a public URL if the disk has one (S3 with `publicUrlBase`, local with `publicUrlBase`, etc.). Returns `null` otherwise; stream bytes via `media.stream()`.
+- **`temporaryUrl()`** — always returns a URL. Works for any driver. Local driver signs an HMAC token you terminate via `verifySignedToken`; S3 uses a presigned GET.
+
+### Conversion fallback
+
+If the requested conversion hasn't finished generating yet (queued job still running), `url()` / `temporaryUrl()` / `stream()` fall back to the **original** by default. Images appear at full size until the variant is ready, then swap on next load.
+
+Opt out with `{ fallback: false }` — returns the would-be URL regardless (404-prone).
+
+## Byte access
+
+```ts
+const { body, contentType, contentLength } = await media.stream(record, 'thumb', {
+  range: { start: 0, end: 1023 },
+  fallback: true,
+})
+body.pipe(res)
+```
+
+`body` is a Node `Readable` — pipe it into your response. Supports HTTP Range.
+
+## Signed token verification
+
+For a local-driver private-serve route:
+
+```ts
+app.get('/api/media/signed/:token', async (req, res) => {
+  const verified = await media.verifySignedToken(req.params.token)
+  if (!verified) return res.status(403).end()
+  const { body, contentType } = await media.stream(verified.media)
+  res.setHeader('content-type', contentType)
+  body.pipe(res)
+})
+```
+
+## Mutations
+
+```ts
+await media.delete(mediaId)                                   // deletes record + files + conversions
+await media.reorder([uuid1, uuid2, uuid3])
+await media.updateCustomProperties(mediaId, { alt: 'new' })
+await media.regenerateConversions(mediaId)
+```
+
+## Advanced — `$context`
+
+The resolved internals for plugins and advanced integrations:
+
+```ts
+media.$context.config       // ResolvedConfig — secret, db, storage, image, queue, owners, events, logger
+media.$context.repo         // MediaRepository — low-level DB access
+```
+
+Reach for these when building custom tooling; they're stable across minor versions.
+
+## Migration / schema management
+
+```ts
+await media.migrate()                                         // apply the media table / indexes
+```
+
+Or via CLI:
+
+```bash
+npx mediable migrate
+```
+
+## Types
+
+```ts
+import type {
+  MediaRecord,
+  OwnerRef,
+  StorageDriver,
+  DatabaseAdapter,
+  ImageProcessor,
+  Queue,
+  PresignUploadInput,
+  PresignUploadResult,
+  ConfirmUploadInput,
+} from 'mediable'
+```
+
+Every public type is exported from the root. See [the source's `src/types.ts`](https://github.com/arifurrahmanns/mediable/blob/main/packages/mediable/src/types.ts) for the authoritative definitions.

@@ -31,6 +31,7 @@ Attach files (images, docs, video) to any model (`User`, `Product`, `Post`, …)
 - [API reference](#api-reference)
   - [Conversion fallback](#conversion-fallback)
 - [Recipes](#recipes)
+  - [Direct-to-storage uploads](#direct-to-storage-uploads)
 - [Database schema](#database-schema)
 - [Type reference](#type-reference)
 - [Security](#security)
@@ -52,6 +53,7 @@ One install. Sharp, better-sqlite3, and BullMQ are bundled as dependencies and l
 | `import { sharpProcessor } from 'mediable/sharp'` | Sharp native bindings — only if you opt in |
 | `import { bullmqQueue } from 'mediable/bullmq'` | BullMQ + ioredis — only if you opt in |
 | `import { mongooseAdapter } from 'mediable/mongoose'` | Mongoose — only if you opt in or pick `provider: 'mongodb'` |
+| `import { s3Storage } from 'mediable/s3'` | AWS SDK v3 (S3 / R2 / MinIO / B2) — only if you opt in |
 
 TypeScript-first. Publishes ESM + CJS. Requires Node 20+. Install size is ~100MB because of Sharp and BullMQ — if that's a dealbreaker, open an issue.
 
@@ -369,6 +371,10 @@ For new projects, prefer the built-in providers above — you'll write less code
 
 ### Storage
 
+Two built-in drivers — **LocalStorage** for dev / single-server, **s3Storage** for S3, Cloudflare R2, MinIO, Backblaze B2, DigitalOcean Spaces, Wasabi, and any other S3-compatible service.
+
+#### Local disk
+
 ```ts
 import { LocalStorage } from 'mediable'
 
@@ -384,7 +390,53 @@ storage: {
 }
 ```
 
-Write your own driver by implementing `StorageDriver` (see the [type reference](#type-reference)).
+#### S3 / Cloudflare R2 / MinIO / Backblaze B2
+
+```ts
+import { s3Storage } from 'mediable/s3'
+
+storage: {
+  default: 's3',
+  disks: {
+    s3: s3Storage({
+      bucket: 'my-app-media',
+      region: 'us-east-1',                  // 'auto' for R2
+      credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY!,
+        secretAccessKey: process.env.S3_SECRET_KEY!,
+      },
+      // Optional — set for non-AWS providers:
+      // endpoint: process.env.S3_ENDPOINT,  // R2: 'https://<acct>.r2.cloudflarestorage.com'
+      //                                     // MinIO: 'http://localhost:9000'
+      //                                     // B2: 'https://s3.<region>.backblazeb2.com'
+      // forcePathStyle: true,               // required for MinIO; optional elsewhere
+
+      publicUrlBase: 'https://cdn.example.com',   // optional: CDN / public bucket prefix
+      keyPrefix: 'uploads/',                      // optional: namespace inside the bucket
+      acl: 'public-read',                         // optional: apply to every put()
+      defaultCacheControl: 'public, max-age=31536000, immutable',
+    }),
+  },
+}
+```
+
+Works with any S3-compatible backend. Presets:
+
+| Provider | `region` | `endpoint` | `forcePathStyle` |
+|---|---|---|---|
+| AWS S3 | e.g. `'us-east-1'` | *(omit)* | *(omit)* |
+| Cloudflare R2 | `'auto'` | `'https://<acct>.r2.cloudflarestorage.com'` | *(omit)* |
+| MinIO | `'us-east-1'` | `'http://localhost:9000'` | `true` |
+| Backblaze B2 | e.g. `'us-west-002'` | `'https://s3.us-west-002.backblazeb2.com'` | *(omit)* |
+| DigitalOcean Spaces | e.g. `'nyc3'` | `'https://nyc3.digitaloceanspaces.com'` | *(omit)* |
+
+`publicUrlBase` is optional. Without it, `media.url()` returns `null` and you stream bytes through your own route via `media.stream()` — appropriate for private buckets. With it, `media.url()` returns the concatenated public URL for direct browser access.
+
+**Direct-to-storage uploads.** Because `s3Storage` implements `StorageDriver.presignUpload`, you can skip the server proxy entirely and have the browser PUT straight to the bucket — see [Direct-to-storage uploads](#direct-to-storage-uploads) below.
+
+#### Bring your own driver
+
+Implement the `StorageDriver` interface and plug it into `disks`. Mandatory methods: `put`, `get`, `getBuffer`, `delete`, `deleteMany`, `exists`, `size`, `url`, `temporaryUrl`, `stream`. Optional: `copy`, `move`, `presignUpload`. See the [type reference](#type-reference).
 
 ### Image processor
 
@@ -580,6 +632,19 @@ await media.delete(mediaId)                                            // delete
 await media.reorder([uuid1, uuid2, uuid3])
 await media.updateCustomProperties(mediaId, { alt: 'new' })
 await media.regenerateConversions(mediaId)
+
+// ---- Direct-to-storage uploads (S3 / R2 / MinIO / B2) ----
+// See the "Direct-to-storage uploads" recipe for the full flow.
+const { uuid, uploadUrl, method, headers, expires } = await media.presignUpload({
+  model: { type: 'User', id: userId },
+  fileName: 'avatar.jpg',
+  mimeType: 'image/jpeg',
+  size: 1_048_576,                                                      // optional hint
+  collection: 'avatars',
+  expiresInSeconds: 600,
+})
+// … client PUTs bytes to uploadUrl …
+const record = await media.confirmUpload({ uuid })                     // status='ready', conversions kicked off
 ```
 
 ### What `file` accepts
@@ -710,6 +775,82 @@ export class AvatarController {
   }
 }
 ```
+
+### Direct-to-storage uploads
+
+Skip the server proxy entirely — have the browser PUT bytes directly to S3 / R2 / MinIO / B2. The server only issues a presigned URL and later confirms the upload; your Node process never touches the file bytes. Large uploads don't tie up memory / bandwidth, and the conversion pipeline runs asynchronously in the queue.
+
+```
+Browser               Your backend                 R2 / S3                    BullMQ worker
+   │                      │                           │                            │
+   │ 1. POST /presign-url │                           │                            │
+   │ ────────────────────>│  media.presignUpload()    │                            │
+   │                      │  → reserves DB row        │                            │
+   │                      │    status='pending'       │                            │
+   │                      │  → signs PUT URL          │                            │
+   │ <── { uuid, url } ───│                           │                            │
+   │                      │                           │                            │
+   │ 2. PUT <url> ────────────────────────────────────>│  stores object            │
+   │ <── 200 OK ──────────────────────────────────────│                            │
+   │                      │                           │                            │
+   │ 3. POST /confirm     │                           │                            │
+   │ ────────────────────>│  media.confirmUpload()    │                            │
+   │                      │  → verify object exists   │                            │
+   │                      │  → sniff real mime type   │                            │
+   │                      │  → re-validate size/mime  │                            │
+   │                      │  → status='ready'         │                            │
+   │                      │  → enqueue conversions ───────────────────────────────>│
+   │ <── MediaRecord ─────│                           │                            │
+   │                      │                           │          download ────────>│  Sharp runs,
+   │                      │                           │          upload variants <─│  updates DB row
+```
+
+**Step 1 — presign.** Your route calls `media.presignUpload()`. It validates the client's mime/size hints against the collection, reserves a DB row with `status='pending'`, asks the disk driver to sign a PUT URL, and returns `{ uuid, uploadUrl, method, headers, expires }`.
+
+```ts
+// POST /presign-upload
+app.post('/presign-upload', requireAuth, async (req, res) => {
+  const user = await getUser(req)
+  const { uuid, uploadUrl, method, headers, expires } = await media.presignUpload({
+    model: { type: 'User', id: user.id },
+    fileName: req.body.fileName,             // 'avatar.jpg'
+    mimeType: req.body.mimeType,             // 'image/jpeg'  (optional but enforced by bucket)
+    size: req.body.size,                     // bytes (optional hint; re-checked on confirm)
+    collection: 'avatars',
+    expiresInSeconds: 600,
+  })
+  res.json({ uuid, uploadUrl, method, headers, expires })
+})
+```
+
+**Step 2 — PUT directly to the bucket.** The browser uses whatever it has (`fetch`, `XMLHttpRequest`, `axios`) to PUT the file bytes at `uploadUrl`. The server is not in this hop.
+
+```js
+await fetch(uploadUrl, {
+  method,                                    // 'PUT'
+  headers,                                   // may include { 'content-type': 'image/jpeg' }
+  body: file,                                // the raw File / Blob
+})
+```
+
+**Step 3 — confirm.** The browser calls back with the `uuid`. `confirmUpload` verifies the object actually landed, **sniffs the real mime type from the first 4KB** (so a client can't lie at presign time), re-validates size, flips the row to `status='ready'`, and kicks off conversions. Queued conversions are fire-and-forget — the response comes back immediately, and the BullMQ worker picks them up.
+
+```ts
+// POST /confirm-upload
+app.post('/confirm-upload', requireAuth, async (req, res) => {
+  const record = await media.confirmUpload({ uuid: req.body.uuid })
+  res.status(201).json(record)
+})
+```
+
+**What you get for free:**
+
+- **Security**: the real mime type is sniffed from bytes at confirm time — clients lying about the `mimeType` at presign get rejected before the record is made visible. Size is re-checked against `maxSize` from the actual bucket object.
+- **Idempotency**: calling `confirmUpload()` twice with the same `uuid` returns the existing ready record — safe to retry.
+- **Failure recovery**: uploads that are started but never confirmed leave a `status='pending'` row that never becomes visible via `media.url()` / `media.list()`. Use `repo.findOrphans(date)` in a cron to reap them.
+- **Async optimization**: `preview`, `thumb`, responsive variants run in the BullMQ worker. `confirmUpload()` returns in milliseconds — the client sees the record immediately and polls `record.generatedConversions.thumb` to know when the variant is ready (or uses `media.url(record, 'thumb')` which falls back to the original until the variant exists).
+
+**Works with every S3-compatible backend** (AWS, Cloudflare R2, MinIO, Backblaze B2, Spaces, Wasabi). Local disk does not support presigned uploads — `media.presignUpload()` throws a helpful error. Use `media.addMedia()` for local.
 
 ### Private stream-through-app
 

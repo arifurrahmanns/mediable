@@ -1,0 +1,19 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "quick-start",
+    "---Core---",
+    "owners-and-collections",
+    "conversions",
+    "---Storage---",
+    "storage",
+    "direct-upload",
+    "---Infrastructure---",
+    "database",
+    "queue",
+    "---Reference---",
+    "api",
+    "frameworks"
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "name": "mediable",
-  "version": "0.1.4",
-  "description": "Headless, framework-agnostic media library for Node.js. Attach files to any model with named collections, image conversions, pluggable storage (local FS, S3) and databases (SQLite, Postgres, MySQL, MongoDB).",
+  "version": "0.2.0",
+  "description": "Headless, framework-agnostic media library for Node.js. Attach files to any model with named collections, image conversions, pluggable storage (local FS, S3 / R2 / MinIO / B2) and databases (SQLite, Postgres, MySQL, MongoDB).",
   "type": "module",
   "license": "MIT",
   "author": {
@@ -31,6 +31,10 @@
     "sharp",
     "bullmq",
     "s3",
+    "aws-s3",
+    "cloudflare-r2",
+    "minio",
+    "backblaze-b2",
     "postgres",
     "mysql",
     "sqlite",
@@ -67,6 +71,11 @@
       "types": "./dist/mongoose/index.d.ts",
       "import": "./dist/mongoose/index.js",
       "require": "./dist/mongoose/index.cjs"
+    },
+    "./s3": {
+      "types": "./dist/s3/index.d.ts",
+      "import": "./dist/s3/index.js",
+      "require": "./dist/s3/index.cjs"
     }
   },
   "files": [
@@ -86,24 +95,26 @@
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1033.0",
+    "@aws-sdk/s3-request-presigner": "^3.1033.0",
     "better-sqlite3": "^12.9.0",
-    "bullmq": "^5.25.0",
+    "bullmq": "^5.75.2",
     "file-type": "^22.0.1",
-    "jiti": "^2.4.0",
+    "jiti": "^2.6.1",
     "kysely": "^0.28.16",
-    "mongoose": "^8.8.0",
-    "mysql2": "^3.11.4",
-    "nanoid": "^5.0.7",
-    "pg": "^8.13.1",
+    "mongoose": "^9.5.0",
+    "mysql2": "^3.22.1",
+    "nanoid": "^5.1.9",
+    "pg": "^8.20.0",
     "prompts": "^2.4.2",
     "sharp": "^0.34.5"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.11",
-    "@types/pg": "^8.11.10",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/pg": "^8.20.0",
     "@types/prompts": "^2.4.9",
-    "tsup": "^8.3.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.4"
   }
 }

@@ -1,5 +1,11 @@
 import { mediable, LocalStorage } from 'mediable'
 import { sharpProcessor } from 'mediable/sharp'
+import { s3Storage } from 'mediable/s3'
+
+// If S3_BUCKET is set, the s3 disk is wired and becomes the default.
+// Otherwise the local disk is used — direct-to-storage uploads will
+// throw because LocalStorage doesn't support presignUpload (by design).
+const hasS3 = !!process.env.S3_BUCKET
 
 export const media = mediable({
   secret: process.env.MEDIA_SECRET ?? 'dev-secret-at-least-16-chars-long',
@@ -19,12 +25,27 @@ export const media = mediable({
   },
 
   storage: {
-    default: 'local',
+    default: hasS3 ? 's3' : 'local',
     disks: {
       local: LocalStorage({
         root: './storage/media',
         publicUrlBase: '/media',
       }),
+      ...(hasS3
+        ? {
+            s3: s3Storage({
+              bucket: process.env.S3_BUCKET!,
+              region: process.env.S3_REGION ?? 'auto',
+              endpoint: process.env.S3_ENDPOINT,
+              forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+              credentials: {
+                accessKeyId: process.env.S3_ACCESS_KEY!,
+                secretAccessKey: process.env.S3_SECRET_KEY!,
+              },
+              publicUrlBase: process.env.S3_PUBLIC_URL_BASE,
+            }),
+          }
+        : {}),
     },
   },
 
@@ -37,7 +58,6 @@ export const media = mediable({
         .accepts('image/*')
         .maxSize('5MB')
         .convert('thumb', (i) => i.width(96).height(96).fit('cover').format('webp'))
-        // Heavy variant runs in the queue with a low priority
         .convert('preview', (i) => i.width(1920).format('webp'), {
           queued: true,
           priority: 10,

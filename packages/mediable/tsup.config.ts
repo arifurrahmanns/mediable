@@ -6,6 +6,7 @@ export default defineConfig({
     'sharp/index': 'src/sharp/index.ts',
     'bullmq/index': 'src/bullmq/index.ts',
     'mongoose/index': 'src/mongoose/index.ts',
+    's3/index': 'src/s3/index.ts',
     'cli/index': 'src/cli/index.ts',
   },
   format: ['esm', 'cjs'],
@@ -24,5 +25,7 @@ export default defineConfig({
     'pg',
     'mysql2',
     'jiti',
+    '@aws-sdk/client-s3',
+    '@aws-sdk/s3-request-presigner',
   ],
 })

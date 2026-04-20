@@ -7,6 +7,13 @@ import type { MediaRecord, OwnerRef } from '../types'
 import type { StreamResult } from '../storage/types'
 import { verifyLocalSignedToken } from '../storage/local'
 import { MediaAttacher, performAttach, type AttachInput, type AttachSource } from './attacher'
+import {
+  performConfirmUpload,
+  performPresignUpload,
+  type ConfirmUploadInput,
+  type PresignUploadInput,
+  type PresignUploadResult,
+} from './presign'
 
 /**
  * File-like inputs accepted by `mm.addMedia()`. Covers raw data and most
@@ -76,6 +83,24 @@ export interface MediaClient {
 
   // ---- Raw attach (advanced / ingestion scripts) ----
   attach(input: AttachInput): Promise<MediaRecord>
+
+  // ---- Direct-to-storage uploads (S3 / R2 / MinIO / B2) ----
+  /**
+   * Reserve a media slot + issue a presigned URL the client PUTs to directly.
+   * Requires the target disk to support presigned uploads (S3/R2/MinIO/B2 do;
+   * LocalStorage does not — use `addMedia()` for local).
+   *
+   * Follow-up call: `confirmUpload({ uuid })` once the client PUT succeeds.
+   */
+  presignUpload(input: PresignUploadInput): Promise<PresignUploadResult>
+
+  /**
+   * Confirm a direct-to-storage upload by its uuid. Verifies the object
+   * exists in the bucket, re-validates size + mime type against the
+   * collection, flips the record to `status='ready'`, and kicks off
+   * conversions (inline + queued). Idempotent on already-ready records.
+   */
+  confirmUpload(input: ConfirmUploadInput): Promise<MediaRecord>
 
   // ---- Retrieval ----
   get(id: string): Promise<MediaRecord | null>
@@ -156,6 +181,14 @@ export function createClient(config: ResolvedConfig, repo: MediaRepository): Med
 
     attach(input) {
       return performAttach(input, config, repo)
+    },
+
+    presignUpload(input) {
+      return performPresignUpload(input, config, repo)
+    },
+
+    confirmUpload(input) {
+      return performConfirmUpload(input, config, repo)
     },
 
     get(id) {
@@ -465,3 +498,9 @@ async function deleteAllFiles(media: MediaRecord, config: ResolvedConfig): Promi
 
 export { MediaAttacher, performAttach } from './attacher'
 export type { AttachInput, AttachSource } from './attacher'
+export { performConfirmUpload, performPresignUpload } from './presign'
+export type {
+  ConfirmUploadInput,
+  PresignUploadInput,
+  PresignUploadResult,
+} from './presign'

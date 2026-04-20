@@ -1,0 +1,214 @@
+---
+title: Owners and collections
+description: Model who-owns-what and what rules apply. Spatie-flavored fluent API — singleFile, accepts, maxSize, maxFiles, colocated conversions.
+---
+
+`owners` is a map keyed by your app's model names. Each entry is a builder callback that registers collections, conversions, and authorization rules for that owner.
+
+```ts
+owners: {
+  User: ({ collection, convert, authorize }) => {
+    // collections, conversions, authz rules for User media
+  },
+  Product: ({ collection }) => {
+    // collections for Product media
+  },
+  '*': ({ convert }) => {
+    // wildcard — applies when a specific owner isn't registered
+  },
+}
+```
+
+The library stores records as `(modelType, modelId)` tuples. Attaching media from a route is just:
+
+```ts
+await media.addMedia({
+  model: { type: 'User', id: userId },
+  file: req.file,
+  collection: 'avatars',
+})
+```
+
+## Collections — Spatie-flavored fluent API
+
+```ts
+User: ({ collection }) => {
+  collection('avatars')
+    .singleFile()                       // replace on re-upload
+    .accepts('image/*')                 // mime-type allowlist
+    .maxSize('5MB')                     // or bytes: 5_242_880
+    .convert('thumb', (i) =>
+      i.width(96).height(96).fit('cover').format('webp'))
+
+  collection('documents')
+    .accepts('application/pdf')
+    .maxFiles(20)
+    .disk('s3')                         // this collection lives on s3, not the default disk
+    .fallbackUrl('/images/default-doc.png')
+}
+```
+
+### Collection builder reference
+
+| Method | Purpose |
+|---|---|
+| `.singleFile()` | Replace existing record on new upload. `maxFiles(1) + replacesExisting()`. |
+| `.accepts('image/*', 'application/pdf', '.docx')` | Mime-type / extension allowlist. Supports wildcards. |
+| `.maxSize('5MB')` | Max bytes per file. Accepts `'2MB'`, `'500KB'`, `'1GB'`, or raw bytes. |
+| `.maxFiles(n)` | Cap the number of records in the collection. |
+| `.disk(name)` | Route this collection to a specific disk (e.g. `'s3'`). Overrides `storage.default`. |
+| `.conversionsDisk(name)` | Route derived variants (thumbs, previews) to a different disk than the original. |
+| `.fallbackUrl(url)` | Returned by `media.url()` when no record exists. |
+| `.preservingOriginal()` | Keep the original even after conversions run (default). |
+| `.convert(name, (i) => ...)` | Colocated conversion — only applies to this collection. |
+| `.convert(name, fn, { queued: true, priority: 10 })` | Queued conversion; lower priority = higher importance, 0 = no priority. |
+
+### Shortcuts
+
+| Written | Equivalent |
+|---|---|
+| `.accepts('image/*')` | `.acceptsMimeTypes(/^image\//)` |
+| `.accepts('image/png', 'image/jpeg')` | `.acceptsMimeTypes(['image/png', 'image/jpeg'])` |
+| `.accepts('.pdf', '.docx')` | `.acceptsExtensions(['.pdf', '.docx'])` |
+| `.maxSize('2MB')` | `.maxFileSize(2 * 1024 * 1024)` (supports `KB` / `MB` / `GB`) |
+| `.singleFile()` | `.maxFiles(1).replacesExisting()` |
+
+## Conversions
+
+Two flavors, picked by where you call `.convert()`:
+
+### Colocated conversion (per-collection)
+
+```ts
+collection('avatars')
+  .convert('thumb', (i) => i.width(96).height(96).fit('cover').format('webp'))
+  .convert('preview', (i) => i.width(1920).format('webp'), {
+    queued: true,
+    priority: 10,
+  })
+```
+
+Runs only for this collection.
+
+### Shared conversion (across collections)
+
+```ts
+Product: ({ collection, convert }) => {
+  collection('gallery').accepts('image/*').maxFiles(8)
+  collection('hero').singleFile().accepts('image/*')
+
+  // Apply to both 'gallery' and 'hero'
+  convert('card', (i) => i.width(640).fit('inside').format('webp'))
+    .performOn('gallery', 'hero')
+}
+```
+
+### Wildcard conversion (all image collections on this owner)
+
+```ts
+User: ({ convert }) => {
+  // Every image collection on User gets this thumb automatically
+  convert('thumb', (i) => i.width(128).height(128).fit('cover').format('webp'))
+}
+```
+
+Or globally via `'*'`:
+
+```ts
+'*': ({ convert }) => {
+  convert('thumb', (i) => i.width(128).height(128).fit('cover').format('webp'))
+}
+```
+
+The `'*'` owner runs for any `modelType` that doesn't have its own entry.
+
+### Inline vs queued
+
+By default, conversions run **synchronously** during `addMedia()` / `confirmUpload()`. Good for small, fast ops (96px thumb). For heavy work (1920px preview, video probe), mark them queued:
+
+```ts
+.convert('preview', (i) => i.width(1920).format('webp'), {
+  queued: true,
+  priority: 10,     // 0 = no priority (FIFO); lower number = higher priority
+})
+```
+
+Queued conversions run in the **configured queue**:
+
+- `InProcessQueue` (default): same Node process, async but non-durable
+- `bullmqQueue({ connection })`: Redis-backed, durable, horizontally scalable
+
+`record.generatedConversions[name]` flips from `false` to `true` when a queued variant finishes. `media.url(record, 'preview')` automatically falls back to the original URL until the variant exists.
+
+## The `ImageBuilder` DSL
+
+```ts
+i.width(w)
+ .height(h)
+ .fit('cover' | 'contain' | 'fill' | 'inside' | 'outside')
+ .format('webp' | 'jpeg' | 'png' | 'avif', { quality: 80 })
+ .quality(q)
+ .blur(sigma?)
+ .sharpen()
+ .grayscale()
+ .rotate(deg)
+ .flip()
+ .flop()
+ .crop(x, y, w, h)
+```
+
+All operations are captured into a **plan** (not executed at config time). The plan runs per-upload through the configured `ImageProcessor` — `sharpProcessor()` by default.
+
+## Authorization
+
+Per-owner authz rules live next to the owner they guard:
+
+```ts
+User: ({ collection, authorize }) => {
+  collection('avatars').singleFile().accepts('image/*')
+
+  authorize('upload', async (req, ctx) => (await getUser(req)) !== null)
+  authorize('delete', async (req, ctx) => (await getUser(req))?.id === ctx.media.modelId)
+}
+```
+
+Resolution order:
+
+1. If the owner registered a rule for the action → use it
+2. Else if the top-level `authorize[action]` is set → use it
+3. Else → default allow for `view`/`serve`, default deny for `upload`/`delete`/`update`
+
+mediable calls these when you call `media.*` functions — you're still in control of the HTTP layer, but the rules centralize who-can-do-what.
+
+## Putting it all together
+
+```ts
+export const media = mediable({
+  secret: process.env.MEDIA_SECRET!,
+  database: { provider: 'postgres', connection: { url: process.env.DATABASE_URL! }, autoMigrate: true },
+  storage: { default: 'local', disks: { local: LocalStorage({ root: './storage/media' }) } },
+  image: sharpProcessor(),
+
+  owners: {
+    User: ({ collection, convert }) => {
+      collection('avatars')
+        .singleFile()
+        .accepts('image/*')
+        .maxSize('5MB')
+        .convert('thumb', (i) => i.width(96).height(96).fit('cover').format('webp'))
+        .convert('preview', (i) => i.width(1920).format('webp'), { queued: true, priority: 10 })
+
+      collection('documents').accepts('application/pdf').maxFiles(20)
+    },
+
+    Product: ({ collection, convert }) => {
+      collection('gallery').accepts('image/*').maxFiles(8)
+      convert('card', (i) => i.width(640).fit('inside').format('webp')).performOn('gallery')
+    },
+
+    '*': ({ convert }) => {
+      convert('thumb', (i) => i.width(128).height(128).fit('cover').format('webp'))
+    },
+  },
+})
+```

@@ -1,7 +1,9 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   Post,
@@ -13,9 +15,18 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express'
 import type { Response } from 'express'
 import { media } from './media.js'
+import { demoHtml } from './demo-html.js'
 
 @Controller()
 export class MediaController {
+  // ─────────── Home page with both upload flows ───────────
+  @Get()
+  @Header('content-type', 'text/html; charset=utf-8')
+  home() {
+    return demoHtml('NestJS')
+  }
+
+  // ─────────── Server-proxied upload ───────────
   @Post('users/:id/avatar')
   @UseInterceptors(FileInterceptor('file'))
   async uploadAvatar(
@@ -30,13 +41,40 @@ export class MediaController {
     })
   }
 
+  // ─────────── Direct-to-storage upload ───────────
+  @Post('api/presign-upload')
+  async presignUpload(
+    @Body()
+    body: {
+      userId?: string
+      fileName: string
+      mimeType?: string
+      size?: number
+      collection?: string
+    },
+  ) {
+    return media.presignUpload({
+      model: { type: 'User', id: body.userId ?? 'u1' },
+      fileName: body.fileName,
+      mimeType: body.mimeType,
+      size: body.size,
+      collection: body.collection ?? 'avatars',
+      expiresInSeconds: 600,
+    })
+  }
+
+  @Post('api/confirm-upload')
+  async confirmUpload(@Body() body: { uuid: string }) {
+    return media.confirmUpload({ uuid: body.uuid })
+  }
+
+  // ─────────── Retrieval ───────────
   @Get('users/:id/avatar')
   async getAvatar(@Param('id') id: string) {
     const record = await media.getFirst({ type: 'User', id }, 'avatars')
     if (!record) return { error: 'no avatar' }
     return {
       record,
-      // `preview` may still be processing in the queue — fallback is automatic.
       thumbUrl: await media.url(record, 'thumb'),
       previewUrl: await media.url(record, 'preview'),
     }
@@ -78,7 +116,6 @@ export class MediaController {
   async deleteMedia(@Param('id') id: string) {
     const record = await media.get(id)
     if (!record) return
-    // YOUR authorization goes here.
     await media.delete(record.id)
   }
 

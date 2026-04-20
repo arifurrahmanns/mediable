@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { media } from './media.js'
+import { demoHtml } from './demo-html.js'
 
 mkdirSync('./storage/media', { recursive: true })
 
@@ -11,7 +12,7 @@ const app = new Hono()
 
 app.use('/media/*', serveStatic({ root: './storage' }))
 
-// Upload — no multer / busboy / middleware. `formData()` is built in.
+// ─────────── Server-proxied upload (multipart) ───────────
 app.post('/users/:id/avatar', async (c) => {
   const form = await c.req.formData()
   const file = form.get('file')
@@ -27,12 +28,32 @@ app.post('/users/:id/avatar', async (c) => {
   return c.json(record, 201)
 })
 
+// ─────────── Direct-to-storage upload ───────────
+app.post('/api/presign-upload', async (c) => {
+  const body = await c.req.json()
+  const result = await media.presignUpload({
+    model: { type: 'User', id: body.userId ?? 'u1' },
+    fileName: body.fileName,
+    mimeType: body.mimeType,
+    size: body.size,
+    collection: body.collection ?? 'avatars',
+    expiresInSeconds: 600,
+  })
+  return c.json(result)
+})
+
+app.post('/api/confirm-upload', async (c) => {
+  const { uuid } = await c.req.json()
+  const record = await media.confirmUpload({ uuid })
+  return c.json(record, 201)
+})
+
+// ─────────── Retrieval / delete / signed URLs ───────────
 app.get('/users/:id/avatar', async (c) => {
   const record = await media.getFirst({ type: 'User', id: c.req.param('id') }, 'avatars')
   if (!record) return c.json({ error: 'no avatar' }, 404)
   return c.json({
     record,
-    // `preview` may still be processing in the queue — fallback to original is automatic.
     thumbUrl: await media.url(record, 'thumb'),
     previewUrl: await media.url(record, 'preview'),
   })
@@ -46,13 +67,10 @@ app.get('/products/:id/gallery', async (c) => {
 app.delete('/media/:id', async (c) => {
   const record = await media.get(c.req.param('id'))
   if (!record) return c.body(null, 404)
-  // YOUR authorization:
-  // if (c.get('user')?.id !== record.modelId) return c.body(null, 403)
   await media.delete(record.id)
   return c.body(null, 204)
 })
 
-// Signed-URL terminator — verify token then stream bytes
 app.get('/signed/:token', async (c) => {
   const verified = await media.verifySignedToken(c.req.param('token'))
   if (!verified) return c.body(null, 403)
@@ -66,19 +84,9 @@ app.get('/signed/:token', async (c) => {
   })
 })
 
-app.get('/', (c) =>
-  c.html(`<!doctype html>
-<html><body style="font-family:sans-serif;max-width:640px;margin:2rem auto">
-  <h1>mediable example — hono</h1>
-  <form method="post" enctype="multipart/form-data" action="/users/u1/avatar">
-    <p><input type="file" name="file" accept="image/*" required /></p>
-    <p><button type="submit">Upload avatar for user u1</button></p>
-  </form>
-  <p><a href="/users/u1/avatar">GET /users/u1/avatar</a></p>
-</body></html>`),
-)
+app.get('/', (c) => c.html(demoHtml('Hono')))
 
 const port = Number(process.env.PORT ?? 3000)
-serve({ fetch: app.fetch, port }, () => {
-  console.log(`mediable hono example listening on http://localhost:${port}`)
-})
+serve({ fetch: app.fetch, port }, () =>
+  console.log(`mediable example (hono) listening on http://localhost:${port}`),
+)

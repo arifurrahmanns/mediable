@@ -1,0 +1,233 @@
+---
+title: Direct-to-storage uploads
+description: Browser PUTs bytes directly to S3 / R2 / MinIO / B2 — your Node process only signs the URL and confirms the result. Zero server-side byte handling.
+---
+
+Sending every upload through your Node process works fine for small files, but it ties up your event loop for the duration of each transfer. For 50MB avatars over a slow client connection, that's 30 seconds of blocked memory and bandwidth per user.
+
+**Direct-to-storage** bypasses the server entirely. Your Node process does two small JSON requests — issue a presigned URL, then confirm the result — and never sees a single byte of the actual file.
+
+## The flow
+
+```
+Browser               Your backend                 R2 / S3                    BullMQ worker
+   │                      │                           │                            │
+   │ 1. POST /presign-url │                           │                            │
+   │ ────────────────────>│  media.presignUpload()    │                            │
+   │                      │  → reserves DB row        │                            │
+   │                      │    status='pending'       │                            │
+   │                      │  → signs PUT URL          │                            │
+   │ <── { uuid, url } ───│                           │                            │
+   │                      │                           │                            │
+   │ 2. PUT <url> ────────────────────────────────────>│  stores object            │
+   │ <── 200 OK ──────────────────────────────────────│                            │
+   │                      │                           │                            │
+   │ 3. POST /confirm     │                           │                            │
+   │ ────────────────────>│  media.confirmUpload()    │                            │
+   │                      │  → verify object exists   │                            │
+   │                      │  → sniff real mime type   │                            │
+   │                      │  → re-validate size/mime  │                            │
+   │                      │  → status='ready'         │                            │
+   │                      │  → enqueue conversions ───────────────────────────────>│
+   │ <── MediaRecord ─────│                           │                            │
+   │                      │                           │          download ────────>│  Sharp runs,
+   │                      │                           │          upload variants <─│  updates DB row
+```
+
+## Server: two routes, ~10 lines
+
+### Step 1 — presign
+
+```ts
+// POST /api/presign-upload
+app.post('/api/presign-upload', requireAuth, async (req, res) => {
+  const user = await getUser(req)
+  const { uuid, uploadUrl, method, headers, expires } = await media.presignUpload({
+    model: { type: 'User', id: user.id },
+    fileName: req.body.fileName,             // 'avatar.jpg'
+    mimeType: req.body.mimeType,             // 'image/jpeg'  (enforced by bucket at PUT time)
+    size: req.body.size,                     // bytes (optional hint; re-checked on confirm)
+    collection: 'avatars',
+    expiresInSeconds: 600,                   // 10 minutes
+  })
+  res.json({ uuid, uploadUrl, method, headers, expires })
+})
+```
+
+Under the hood `media.presignUpload()`:
+
+1. Looks up the collection config (`accepts`, `maxSize`, etc.).
+2. Validates the client's `mimeType` and `size` hints against the collection.
+3. Generates a `uuid` + storage `key`.
+4. Inserts a DB row with `status='pending'`.
+5. Calls `driver.presignUpload(key, { expiresInSeconds, contentType })` to sign the URL.
+6. Returns `{ uuid, uploadUrl, method, headers, expires, key }`.
+
+### Step 2 — client PUTs directly to the bucket
+
+Nothing on your server. The browser does:
+
+```js
+await fetch(uploadUrl, {
+  method,                                    // 'PUT'
+  headers,                                   // usually { 'content-type': file.type }
+  body: file,                                // raw File / Blob
+})
+```
+
+### Step 3 — confirm
+
+```ts
+// POST /api/confirm-upload
+app.post('/api/confirm-upload', requireAuth, async (req, res) => {
+  const record = await media.confirmUpload({ uuid: req.body.uuid })
+  res.status(201).json(record)
+})
+```
+
+`media.confirmUpload()`:
+
+1. Finds the pending record by `uuid`.
+2. Calls `driver.exists(key)` — fails if the client never PUT.
+3. Reads the real size via `driver.size(key)` and re-validates against `maxSize`.
+4. Downloads the first 4KB, runs `file-type` for **authoritative mime detection**, re-validates against `accepts`.
+5. Flips `status='ready'`.
+6. Fires `onMediaAdded` event.
+7. Runs conversions: inline ones complete before return; queued ones are enqueued fire-and-forget.
+8. Returns the fresh `MediaRecord`.
+
+Idempotent — calling twice with the same `uuid` returns the existing record.
+
+## Client: the full fetch flow
+
+```ts
+async function uploadAvatar(file: File) {
+  // 1. Get a presigned URL
+  const presign = await fetch('/api/presign-upload', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      collection: 'avatars',
+    }),
+  }).then((r) => r.json())
+
+  // 2. PUT bytes directly to R2 / S3 — server not involved
+  const putRes = await fetch(presign.uploadUrl, {
+    method: presign.method,
+    headers: presign.headers,
+    body: file,
+  })
+  if (!putRes.ok) throw new Error(`upload failed: ${putRes.status}`)
+
+  // 3. Confirm
+  const record = await fetch('/api/confirm-upload', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ uuid: presign.uuid }),
+  }).then((r) => r.json())
+
+  return record
+}
+```
+
+### With progress tracking (XHR)
+
+`fetch` doesn't expose upload progress. Use `XMLHttpRequest` for the PUT step if you need a progress bar:
+
+```ts
+function putWithProgress(url, method, headers, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open(method, url)
+    for (const [k, v] of Object.entries(headers ?? {})) xhr.setRequestHeader(k, v)
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) onProgress((e.loaded / e.total) * 100)
+    })
+    xhr.addEventListener('load', () =>
+      xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`PUT ${xhr.status}`))
+    )
+    xhr.addEventListener('error', () => reject(new Error('network error')))
+    xhr.send(file)
+  })
+}
+```
+
+## CORS — the one config that bites people
+
+The browser won't PUT to a bucket origin unless the bucket explicitly allows it.
+
+### Cloudflare R2
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://yourapp.com", "http://localhost:3000"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["content-type", "content-length"],
+    "ExposeHeaders": ["etag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Apply with:
+
+```bash
+wrangler r2 bucket cors put my-bucket --file cors.json
+```
+
+### AWS S3
+
+Same JSON shape. S3 Console → Bucket → Permissions → CORS, or:
+
+```bash
+aws s3api put-bucket-cors --bucket my-bucket --cors-configuration file://cors.json
+```
+
+**If CORS isn't configured correctly, you'll see `No 'Access-Control-Allow-Origin' header` errors in the browser console before the PUT even reaches the bucket.** That's always the bucket config, not mediable.
+
+## Security properties
+
+| Attack | Mitigation |
+|---|---|
+| Client lies about `mimeType` at presign | `confirmUpload` sniffs the real mime from the first 4KB via `file-type` and re-validates against `collection.accepts`. Rejected before `status='ready'`. |
+| Client uploads 10GB to a `maxSize: '5MB'` collection | `confirmUpload` reads actual size via `driver.size(key)` and validates against `maxFileSize`. Rejected; orphan reaper deletes the object later. |
+| Client steals another user's presigned URL | The URL is tied to one specific key inside your bucket. Even if stolen, an attacker can only overwrite *that* key. Authorize `/presign-upload` to control who can create rows. |
+| Client calls `/confirm-upload` before PUT finishes | `driver.exists(key)` returns false; confirm throws. |
+| Client calls `/confirm-upload` twice | Idempotent — returns the existing ready record without re-running conversions. |
+| Client PUTs but never confirms | Orphan row stays `status='pending'`, invisible to `media.list()` / `media.url()`. Reap via `repo.findOrphans(date)` in a cron job. |
+
+## Handling asynchronous conversions
+
+`confirmUpload` returns as soon as the record is `ready`. Queued conversions (`{ queued: true }`) are **not** finished yet — they run in the BullMQ worker.
+
+Your frontend can either:
+
+- **Poll** — refetch the record periodically; `record.generatedConversions.thumb` flips from `false` to `true` when done.
+- **Use the fallback** — `media.url(record, 'thumb')` falls back to the original URL until the variant exists. The image just appears at full size first, then swaps to the optimized version on next load.
+
+## Size cap — one edge case worth flagging
+
+`presignUpload` signs a PUT URL but doesn't enforce a bucket-level size cap. A malicious authenticated user *could* upload 10GB before `confirmUpload` rejects them — the 10GB object lands in your bucket, then gets orphaned.
+
+Two ways to harden:
+
+1. **Bucket policy.** Set an object-size limit on the bucket itself (works on AWS S3 and R2). Hard ceiling; oversized PUTs fail before they reach your confirm logic.
+2. **POST Policy uploads.** S3 supports a `conditions` array with `content-length-range: [min, max]`. More complex flow (form-data POST instead of PUT). Not shipped in mediable today.
+
+For the typical case — authenticated users uploading avatars — option 1 is enough.
+
+## When to use direct vs server-proxied
+
+| Scenario | Recommendation |
+|---|---|
+| Small files (&lt; 1MB), low volume | Server-proxied — simpler, one request |
+| Large files (images, videos, PDFs) | Direct-to-storage — don't tie up Node |
+| Anything behind a WAF / rate limiter | Direct-to-storage — spares your infra |
+| Local dev without S3 | Server-proxied via `addMedia()` |
+| Strict upload validation at the network edge | Server-proxied (mediable validates either way, but you control when) |
+
+The two flows use the same record shape, the same conversion pipeline, and the same retrieval API — you can mix both in one app.
